@@ -71,35 +71,35 @@ export class CommentsService {
       },
     });
 
-    // ── Notify Assignee (Task Owner) on new comment ──
-    try {
-      const assigneeTelegramId = await this.resolveTelegramId(task.assignee);
-      if (assigneeTelegramId) {
-        // Resolve the commenter's details to see if they are the assignee themselves
-        const allUsers = await this.usersService.findAll();
-        const commenterUser = allUsers.find(
-          u => u.username === data.user || u.firstName === data.user || `${u.firstName} ${u.lastName}` === data.user
-        );
+    // ── Notify Assignee (Task Owner) on new comment in the background ──
+    this.resolveTelegramId(task.assignee)
+      .then(async (assigneeTelegramId) => {
+        if (assigneeTelegramId) {
+          // Resolve the commenter's details to see if they are the assignee themselves
+          const allUsers = await this.usersService.findAll();
+          const commenterUser = allUsers.find(
+            u => u.username === data.user || u.firstName === data.user || `${u.firstName} ${u.lastName}` === data.user
+          );
 
-        const commenterTelegramId = commenterUser?.telegramId;
-        const isCommenterAssignee = commenterTelegramId && commenterTelegramId === assigneeTelegramId;
+          const commenterTelegramId = commenterUser?.telegramId;
+          const isCommenterAssignee = commenterTelegramId && commenterTelegramId === assigneeTelegramId;
 
-        // Skip sending notification if assignee is commenting on their own task
-        if (!isCommenterAssignee) {
-          const message =
-            `${notifyHeader()}\n` +
-            `💬 <b>มีคนแสดงความคิดเห็นในงานของคุณ!</b>\n\n` +
-            `📌 <b>หัวข้อ:</b> ${task.title}\n` +
-            `👤 <b>ผู้เขียน:</b> ${data.user}\n` +
-            `📝 <b>ข้อความ:</b>\n${data.message}`;
+          // Skip sending notification if assignee is commenting on their own task
+          if (!isCommenterAssignee) {
+            const message =
+              `${notifyHeader()}\n` +
+              `💬 <b>มีคนแสดงความคิดเห็นในงานของคุณ!</b>\n\n` +
+              `📌 <b>หัวข้อ:</b> ${task.title}\n` +
+              `👤 <b>ผู้เขียน:</b> ${data.user}\n` +
+              `📝 <b>ข้อความ:</b>\n${data.message}`;
 
-          await this.telegramService.sendDirectMessage(assigneeTelegramId, message);
+            await this.telegramService.sendDirectMessage(assigneeTelegramId, message);
+          }
         }
-      }
-    } catch (err: any) {
-      // Fail silently to avoid blocking comment creation if telegram notification fails
-      console.error(`Failed to send Telegram notification for comment: ${err.message}`);
-    }
+      })
+      .catch((err) => {
+        console.error(`Failed to send Telegram notification for comment in background: ${err.message}`);
+      });
 
     return comment;
   }

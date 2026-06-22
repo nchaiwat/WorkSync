@@ -121,31 +121,36 @@ export class TasksService {
       },
     });
 
-    // ── Notify Manager & Colleagues ──
-    const notifyIds = await this.getTaskNotifyIds(task);
-    if (notifyIds.length > 0) {
-      const deadlineStr = task.deadline
-        ? task.deadline.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })
-        : 'ไม่กำหนด';
+    // ── Notify Manager & Colleagues in the background ──
+    this.getTaskNotifyIds(task)
+      .then(async (notifyIds) => {
+        if (notifyIds.length > 0) {
+          const deadlineStr = task.deadline
+            ? task.deadline.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })
+            : 'ไม่กำหนด';
 
-      const collabList = (() => {
-        try { return Array.isArray(task.collaborators) ? task.collaborators : JSON.parse(task.collaborators as string); }
-        catch { return []; }
-      })();
+          const collabList = (() => {
+            try { return Array.isArray(task.collaborators) ? task.collaborators : JSON.parse(task.collaborators as string); }
+            catch { return []; }
+          })();
 
-      const message =
-        `${notifyHeader()}\n` +
-        `🆕 <b>มีงานใหม่ที่เกี่ยวข้องกับคุณ!</b>\n\n` +
-        `📌 <b>หัวข้อ:</b> ${task.title}\n` +
-        `👤 <b>ผู้รับผิดชอบ:</b> ${task.assignee}\n` +
-        `📊 <b>Progress:</b> ${task.progress}%\n` +
-        (task.manager ? `👔 <b>Manager:</b> ${task.manager}\n` : '') +
-        (collabList.length > 0 ? `👥 <b>เพื่อนร่วมงาน:</b> ${collabList.join(', ')}\n` : '') +
-        `📅 <b>กำหนดส่ง:</b> ${deadlineStr}\n` +
-        `⚙️ <b>สถานะ:</b> ${STATUS_LABELS[task.status] || task.status}`;
+          const message =
+            `${notifyHeader()}\n` +
+            `🆕 <b>มีงานใหม่ที่เกี่ยวข้องกับคุณ!</b>\n\n` +
+            `📌 <b>หัวข้อ:</b> ${task.title}\n` +
+            `👤 <b>ผู้รับผิดชอบ:</b> ${task.assignee}\n` +
+            `📊 <b>Progress:</b> ${task.progress}%\n` +
+            (task.manager ? `👔 <b>Manager:</b> ${task.manager}\n` : '') +
+            (collabList.length > 0 ? `👥 <b>เพื่อนร่วมงาน:</b> ${collabList.join(', ')}\n` : '') +
+            `📅 <b>กำหนดส่ง:</b> ${deadlineStr}\n` +
+            `⚙️ <b>สถานะ:</b> ${STATUS_LABELS[task.status] || task.status}`;
 
-      await this.telegramService.broadcastNotification(notifyIds, message);
-    }
+          await this.telegramService.broadcastNotification(notifyIds, message);
+        }
+      })
+      .catch((err) => {
+        console.error(`Failed to send Telegram notification for new task: ${err.message}`);
+      });
 
     return task;
   }
@@ -197,34 +202,39 @@ export class TasksService {
     const latestUpdateChanged = data.latest_update !== undefined && data.latest_update !== oldTask.latestUpdate;
 
     if (statusChanged || progressChanged || latestUpdateChanged) {
-      const notifyIds = await this.getTaskNotifyIds(task);
-      if (notifyIds.length > 0) {
-        const changes: string[] = [];
-        if (statusChanged) {
-          changes.push(`⚙️ <b>สถานะ:</b> ${STATUS_LABELS[oldTask.status] || oldTask.status} → ${STATUS_LABELS[task.status] || task.status}`);
-        }
-        if (progressChanged) {
-          changes.push(`📊 <b>ความคืบหน้า:</b> ${oldTask.progress}% → ${task.progress}%`);
-        }
-        if (latestUpdateChanged && task.latestUpdate) {
-          const sections = task.latestUpdate.split(/---\r?\n|---/g);
-          const firstSection = sections[0]?.trim() || '';
-          const cleanText = firstSection.replace(/^\[[^\]]+\]/, '').trim();
-          if (cleanText) {
-            changes.push(`📝 <b>ความคืบหน้าล่าสุด:</b>\n${cleanText}`);
+      this.getTaskNotifyIds(task)
+        .then(async (notifyIds) => {
+          if (notifyIds.length > 0) {
+            const changes: string[] = [];
+            if (statusChanged) {
+              changes.push(`⚙️ <b>สถานะ:</b> ${STATUS_LABELS[oldTask.status] || oldTask.status} → ${STATUS_LABELS[task.status] || task.status}`);
+            }
+            if (progressChanged) {
+              changes.push(`📊 <b>ความคืบหน้า:</b> ${oldTask.progress}% → ${task.progress}%`);
+            }
+            if (latestUpdateChanged && task.latestUpdate) {
+              const sections = task.latestUpdate.split(/---\r?\n|---/g);
+              const firstSection = sections[0]?.trim() || '';
+              const cleanText = firstSection.replace(/^\[[^\]]+\]/, '').trim();
+              if (cleanText) {
+                changes.push(`📝 <b>ความคืบหน้าล่าสุด:</b>\n${cleanText}`);
+              }
+            }
+
+            const message =
+              `${notifyHeader()}\n` +
+              `📈 <b>อัปเดตงาน!</b>\n\n` +
+              `📌 <b>หัวข้อ:</b> ${task.title}\n` +
+              `👤 <b>ผู้รับผิดชอบ:</b> ${task.assignee}\n` +
+              `📊 <b>Progress:</b> ${task.progress}%\n` +
+              changes.join('\n');
+
+            await this.telegramService.broadcastNotification(notifyIds, message);
           }
-        }
-
-        const message =
-          `${notifyHeader()}\n` +
-          `📈 <b>อัปเดตงาน!</b>\n\n` +
-          `📌 <b>หัวข้อ:</b> ${task.title}\n` +
-          `👤 <b>ผู้รับผิดชอบ:</b> ${task.assignee}\n` +
-          `📊 <b>Progress:</b> ${task.progress}%\n` +
-          changes.join('\n');
-
-        await this.telegramService.broadcastNotification(notifyIds, message);
-      }
+        })
+        .catch((err) => {
+          console.error(`Failed to send Telegram notification for task update: ${err.message}`);
+        });
     }
 
     return task;
