@@ -311,7 +311,7 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
   return (
     <div className={`bg-white dark:bg-slate-800 rounded-2xl border-2 border-slate-300 dark:border-slate-700 overflow-hidden shadow-md border-t-8 ${statusHeaderBorder}`}>
       {/* Header */}
-      <div className="p-6 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/40">
+      <div className="p-4 sm:p-6 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/40">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             {isEditing && canEdit ? (
@@ -411,7 +411,7 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
       </div>
 
       {/* Progress Section */}
-      <div className="p-6 border-b-2 border-slate-200 dark:border-slate-700/80">
+      <div className="p-4 sm:p-6 border-b-2 border-slate-200 dark:border-slate-700/80">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300 tracking-wide">
             Progress
@@ -439,7 +439,7 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
 
       {/* Edit Form */}
       {isEditing && canEdit && (
-        <div className="p-6 border-b border-gray-200 dark:border-slate-700 space-y-4">
+        <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-slate-700 space-y-4">
           {error && (
             <div className="p-3 bg-red-50 dark:bg-red-900 rounded-lg text-sm text-red-700 dark:text-red-300">
               {error}
@@ -634,8 +634,8 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
       )}
 
       {/* Info Grid */}
-      <div className="p-6 border-b-2 border-slate-250 dark:border-slate-700/65 bg-slate-50/40 dark:bg-slate-900/10">
-        <div className="grid grid-cols-2 gap-4">
+      <div className="p-4 sm:p-6 border-b-2 border-slate-250 dark:border-slate-700/65 bg-slate-50/40 dark:bg-slate-900/10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
               Assignee
@@ -715,7 +715,7 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
       </div>
 
       {/* Task Update Section — always visible */}
-      <div className="p-6 border-b-2 border-blue-300 dark:border-blue-800 bg-blue-50/80 dark:bg-blue-950/20 border-l-4 border-l-blue-600 dark:border-l-blue-500">
+      <div className="p-4 sm:p-6 border-b-2 border-blue-300 dark:border-blue-800 bg-blue-50/80 dark:bg-blue-950/20 border-l-4 border-l-blue-600 dark:border-l-blue-500">
         <h3 className="text-sm font-bold text-blue-900 dark:text-blue-200 mb-4 flex items-center gap-2">
           <span>📝</span> Task Update
         </h3>
@@ -749,7 +749,7 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
               );
               return (
                 <div key={idx} className="bg-white dark:bg-slate-800 p-4 rounded-xl border-2 border-slate-300 dark:border-slate-700 border-l-4 border-l-blue-600 dark:border-l-blue-400 shadow-md space-y-3">
-                  <div className="flex justify-between items-center text-xs font-semibold text-blue-700 dark:text-blue-300">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs font-semibold text-blue-700 dark:text-blue-300">
                     <span>👤 เจ้าของงาน</span>
                     <span>🕒 {update.timestamp}</span>
                   </div>
@@ -759,7 +759,7 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                     <div className="text-xs font-bold text-gray-500 dark:text-gray-400">ความคิดเห็นต่ออัปเดตนี้ ({commentsForUpdate.length})</div>
                     {commentsForUpdate.map(c => (
                       <div key={c.id} className="text-xs bg-gray-50 dark:bg-slate-700/50 p-2.5 rounded-lg border border-gray-100 dark:border-slate-700">
-                        <div className="flex justify-between font-semibold text-gray-700 dark:text-gray-300 mb-0.5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 font-semibold text-gray-700 dark:text-gray-300 mb-1">
                           <UserDisplay name={getUserDisplayName(c.user)} size="sm" telegramId={getUserTelegramId(c.user)} />
                           <span className="text-gray-400 font-normal">
                             {new Date(c.created_at).toLocaleDateString('th-TH', {
@@ -777,7 +777,7 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                         value={replyText[update.key] || ''}
                         onChange={(e) => setReplyText(prev => ({ ...prev, [update.key]: e.target.value }))}
                         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddUpdateReply(update.key); } }}
-                        className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                        className="flex-1 min-w-0 px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                       />
                       <button
                         onClick={() => handleAddUpdateReply(update.key)}
@@ -803,7 +803,7 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
             {/* General comments (will appear under first update once it exists) */}
             {comments.filter(c => !c.update_key).map(c => (
               <div key={c.id} className="text-xs bg-white dark:bg-slate-800 p-2.5 rounded-lg border border-gray-200 dark:border-slate-700">
-                <div className="flex justify-between font-semibold text-gray-700 dark:text-gray-300 mb-0.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   <UserDisplay name={getUserDisplayName(c.user)} size="sm" telegramId={getUserTelegramId(c.user)} />
                   <span className="text-gray-400 font-normal">
                     {new Date(c.created_at).toLocaleDateString('th-TH', {
@@ -821,7 +821,7 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                 value={replyText['__general__'] || ''}
                 onChange={(e) => setReplyText(prev => ({ ...prev, '__general__': e.target.value }))}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddUpdateReply('__general__'); } }}
-                className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                className="flex-1 min-w-0 px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-blue-500 focus:outline-none"
               />
               <button
                 onClick={() => handleAddUpdateReply('__general__')}
