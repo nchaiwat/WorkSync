@@ -36,6 +36,7 @@ services:
       PORT: 4000
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
       TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+      TELEGRAM_API_BASE_URL: "${TELEGRAM_API_BASE_URL}"
     depends_on:
       postgres:
         condition: service_healthy

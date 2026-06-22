@@ -5,9 +5,11 @@ import { ConfigService } from '@nestjs/config';
 export class TelegramService {
   private readonly logger = new Logger(TelegramService.name);
   private readonly botToken: string;
+  private readonly apiBaseUrl: string;
 
   constructor(private readonly configService: ConfigService) {
     this.botToken = this.configService.get<string>('TELEGRAM_BOT_TOKEN') || '';
+    this.apiBaseUrl = this.configService.get<string>('TELEGRAM_API_BASE_URL') || 'https://api.telegram.org';
   }
 
   /**
@@ -25,7 +27,7 @@ export class TelegramService {
     }
 
     try {
-      const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`;
+      const url = `${this.apiBaseUrl}/bot${this.botToken}/sendMessage`;
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
