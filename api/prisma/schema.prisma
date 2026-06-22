@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+model User {
+  id          String   @id @default(uuid())
+  email       String?  @unique
+  username    String   @unique
+  password    String   // Hash password (bcrypt)
+  nickname    String?  @map("nickname")
+  firstName   String   @map("first_name")
+  lastName    String   @map("last_name")
+  status      String   @default("active") // "active" | "inactive" | "suspended"
+  role        Role     @default(USER)
+  department  String?
+  position    String?
+  avatarUrl   String?  @map("avatar_url")
+  telegramId  String?  @map("telegram_id")
+  pinCode     String?  @map("pin_code")
+  isAdAuth    Boolean  @default(false) @map("is_ad_auth") // Use Active Directory authentication
+  devices     Json?    @default("[]")
+  lastAccess  DateTime? @map("last_access")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Task {
+  id               String   @id @default(uuid())
+  title            String
+  description      String?  @db.Text
+  status           String   @default("todo") // "todo" | "in_progress" | "review" | "done"
+  priority         String   @default("medium") // "low" | "medium" | "high"
+  progress         Int      @default(0) // 0-100
+  deadline         DateTime?
+  avatarUrl        String?  @map("avatar_url")
+  collaborators    Json?    // Array of user IDs (strings)
+  createdBy        String?  @map("created_by")
+  latestUpdate     String?  @db.Text @map("latest_update")
+  projectOwner     String?  @map("project_owner")
+  previousProgress Int      @default(0) @map("previous_progress")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  assignee      String
+  manager       String?
+
+  comments      Comment[]
+
+  @@map("tasks")
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  task      String   @map("task") // Task ID
+  user      String   @map("user") // commenter name string
+  message   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updateKey String?  @map("update_key") @db.Text
+
+  // Relations
+  taskRelation Task  @relation(fields: [task], references: [id], onDelete: Cascade)
+
+  @@map("task_comments")
+}

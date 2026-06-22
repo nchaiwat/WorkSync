@@ -1,0 +1,21 @@
+{
+  "name": "ad-sync-agent",
+  "version": "1.0.0",
+  "description": "On-Premise AD Sync Agent for WorkSync — authenticates users via Active Directory and syncs Telegram ID from the Pager field.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "ldapts": "^7.2.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,95 @@
+@import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* บังคับใช้ font ภาษาไทยกับทุก elements */
+*, *::before, *::after {
+  font-family: 'Prompt', sans-serif !important;
+}
+
+html, body {
+  font-family: 'Prompt', sans-serif !important;
+}
+
+:root {
+  --background: #f1f5f9; /* Slate 100 for rich contrast with white cards */
+  --foreground: #0f172a;
+  --card-bg: #ffffff;
+  --card-border: #cbd5e1; /* Slate 300 for pro defined borders */
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+}
+
+.dark {
+  --background: #0b111e; /* Rich dark navy/slate background */
+  --foreground: #f1f5f9;
+  --card-bg: #1e293b;
+  --card-border: #475569; /* Slate 600 for dark mode borders */
+  --primary: #60a5fa;
+  --primary-hover: #3b82f6;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  min-width: 320px;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 3px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+/* Progress bar animation */
+@keyframes progress-fill {
+  from { width: 0%; }
+}
+
+.progress-bar-fill {
+  animation: progress-fill 0.5s ease-out;
+}
+
+/* Card hover effect */
+.task-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.task-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.dark .task-card:hover {
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.4), 0 4px 10px -5px rgba(0, 0, 0, 0.2);
+}
