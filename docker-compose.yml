@@ -29,7 +29,7 @@ services:
     container_name: worksync-api
     restart: unless-stopped
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     environment:
       DATABASE_URL: "postgresql://worksync:worksync_password@postgres:5432/worksync?schema=public"
       JWT_SECRET: "worksync_super_secret_jwt_key_999888"
@@ -53,7 +53,7 @@ services:
     container_name: worksync-nextjs
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: "http://api:4000"
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
@@ -62,10 +62,21 @@ services:
       - api
     networks:
       - worksync-network
+      - root_default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=root_default"
+      - "traefik.http.routers.worksync.entrypoints=websecure"
+      - "traefik.http.routers.worksync.rule=Host(`worksync.windowasia.com`)"
+      - "traefik.http.routers.worksync.tls=true"
+      - "traefik.http.routers.worksync.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.worksync.loadbalancer.server.port=3000"
 
 networks:
   worksync-network:
     driver: bridge
+  root_default:
+    external: true
 
 volumes:
   postgres_data:
