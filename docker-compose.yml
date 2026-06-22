@@ -39,6 +39,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - api_uploads:/app/uploads
     networks:
       - worksync-network
 
@@ -67,3 +69,4 @@ networks:
 
 volumes:
   postgres_data:
+  api_uploads:

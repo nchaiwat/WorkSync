@@ -235,6 +235,40 @@ export async function checkDirectusHealth(): Promise<boolean> {
   }
 }
 
+// ─── User Profile Actions ───────────────────────────────────────────
+
+export async function updateUser(userId: string, data: any): Promise<User> {
+  const url = `${API_BASE}/users/${userId}`;
+  const result = await fetchJSON<{ data: User }>(url, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+  return result.data;
+}
+
+export async function uploadAvatar(userId: string, file: File): Promise<{ avatar_url: string }> {
+  const url = `${API_BASE}/users/${userId}/avatar`;
+  const authHeaders = getAuthHeaders();
+  const formData = new FormData();
+  formData.append('avatar', file);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      ...authHeaders,
+    },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`อัปโหลดล้มเหลว: ${errorText}`);
+  }
+
+  const result = await res.json();
+  return result.data;
+}
+
 // ─── Export API object ──────────────────────────────────────────────
 
 export const api = {
@@ -253,4 +287,6 @@ export const api = {
   validateUserExists,
   sendTelegramNotification,
   checkDirectusHealth,
+  updateUser,
+  uploadAvatar,
 };

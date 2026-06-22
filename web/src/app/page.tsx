@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { getAuthToken, getAuthUsername, logout as authLogout, getMe, formatUserDisplayName, admin } from '@/lib/auth';
 import type { Task, TeamMember, User } from '@/types';
+import { DEPARTMENTS } from '@/types';
 import UserDisplay from '@/components/UserDisplay';
 
 export default function Home() {
@@ -38,6 +39,101 @@ export default function Home() {
   const [isSavingPin, setIsSavingPin] = useState(false);
   const [pinError, setPinError] = useState('');
   const [pinSuccess, setPinSuccess] = useState('');
+
+  // Edit Profile States
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileData, setProfileData] = useState({
+    firstName: '',
+    lastName: '',
+    nickname: '',
+    email: '',
+    telegramId: '',
+    department: '',
+    password: '',
+  });
+  const [profileAvatarFile, setProfileAvatarFile] = useState<File | null>(null);
+  const [profileAvatarPreview, setProfileAvatarPreview] = useState<string>('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState('');
+
+  const handleOpenProfileModal = () => {
+    if (!currentUser) return;
+    setProfileData({
+      firstName: currentUser.first_name || '',
+      lastName: currentUser.last_name || '',
+      nickname: currentUser.nickname || '',
+      email: currentUser.email || '',
+      telegramId: currentUser.telegram_id || '',
+      department: currentUser.department || '',
+      password: '',
+    });
+    setProfileAvatarFile(null);
+    setProfileAvatarPreview(currentUser.avatar_url || '');
+    setProfileError('');
+    setProfileSuccess('');
+    setIsProfileModalOpen(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!currentUser) return;
+    setIsSavingProfile(true);
+    setProfileError('');
+    setProfileSuccess('');
+
+    try {
+      // 1. Update text fields
+      const updates: any = {
+        first_name: profileData.firstName,
+        last_name: profileData.lastName,
+        nickname: profileData.nickname,
+        email: profileData.email,
+        telegram_id: profileData.telegramId,
+        department: profileData.department,
+      };
+      
+      if (profileData.password) {
+        if (profileData.password.length < 6) {
+          throw new Error('รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร');
+        }
+        updates.password = profileData.password;
+      }
+
+      const updatedUser = await api.updateUser(currentUser.id, updates);
+
+      // 2. Upload avatar if selected
+      let finalAvatarUrl = updatedUser.avatar_url;
+      if (profileAvatarFile) {
+        const uploadRes = await api.uploadAvatar(currentUser.id, profileAvatarFile);
+        finalAvatarUrl = uploadRes.avatar_url;
+      }
+
+      // Update current user state with all new data
+      setCurrentUser({
+        ...updatedUser,
+        avatar_url: finalAvatarUrl,
+      });
+
+      // Update displayName
+      setUserName(formatUserDisplayName({
+        ...updatedUser,
+        avatar_url: finalAvatarUrl,
+      }));
+
+      // Reload users list to update dashboard immediately
+      const usersList = await api.getUsers();
+      setUsers(usersList);
+
+      setProfileSuccess('บันทึกโปรไฟล์สำเร็จแล้ว!');
+      setTimeout(() => {
+        setIsProfileModalOpen(false);
+      }, 1500);
+    } catch (err: any) {
+      setProfileError(err.message || 'บันทึกข้อมูลไม่สำเร็จ');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   useEffect(() => {
     const token = getAuthToken();
@@ -152,6 +248,18 @@ export default function Home() {
     return user?.telegram_id || undefined;
   };
 
+  const getUserAvatarUrl = (nameOrId: string) => {
+    if (!nameOrId || !users) return undefined;
+    const user = users.find(u => {
+      if (u.id === nameOrId || u.username === nameOrId || u.first_name === nameOrId) return true;
+      if (formatUserDisplayName(u) === nameOrId) return true;
+      if (u.first_name && nameOrId.includes(`(${u.first_name})`)) return true;
+      if (u.username && nameOrId.includes(`(${u.username})`)) return true;
+      return false;
+    });
+    return user?.avatar_url || undefined;
+  };
+
   const handleLogout = () => {
     authLogout();
   };
@@ -216,7 +324,7 @@ export default function Home() {
       
       return {
         name,
-        avatar_url: '',
+        avatar_url: getUserAvatarUrl(name) || '',
         tasks: memberTasks,
         totalTasks: memberTasks.length,
         completedTasks: memberTasks.filter((t) => t.status === 'done').length,
@@ -258,9 +366,13 @@ export default function Home() {
                         e.stopPropagation();
                         setShowUserDropdown(!showUserDropdown);
                       }}
-                      className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-md active:scale-95 transition-transform"
+                      className="w-9 h-9 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-md active:scale-95 transition-transform"
                     >
-                      {currentUser?.nickname?.charAt(0).toUpperCase() || currentUser?.first_name?.charAt(0).toUpperCase() || 'U'}
+                      {currentUser?.avatar_url ? (
+                        <img src={currentUser.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                        currentUser?.nickname?.charAt(0).toUpperCase() || currentUser?.first_name?.charAt(0).toUpperCase() || 'U'
+                      )}
                     </button>
 
                     {showUserDropdown && (
@@ -270,6 +382,15 @@ export default function Home() {
                           <UserDisplay name={userName} size="sm" telegramId={getUserTelegramId(userName)} />
                         </div>
                         <div className="space-y-1">
+                          <button
+                            onClick={() => {
+                              setShowUserDropdown(false);
+                              handleOpenProfileModal();
+                            }}
+                            className="w-full text-left py-2 px-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-2"
+                          >
+                            👤 แก้ไขโปรไฟล์
+                          </button>
                           <button
                             onClick={() => {
                               setShowUserDropdown(false);
@@ -340,9 +461,13 @@ export default function Home() {
                         e.stopPropagation();
                         setShowUserDropdown(!showUserDropdown);
                       }}
-                      className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-md hover:brightness-105 active:scale-95 transition-transform"
+                      className="w-9 h-9 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-md hover:brightness-105 active:scale-95 transition-transform"
                     >
-                      {currentUser?.nickname?.charAt(0).toUpperCase() || currentUser?.first_name?.charAt(0).toUpperCase() || 'U'}
+                      {currentUser?.avatar_url ? (
+                        <img src={currentUser.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                        currentUser?.nickname?.charAt(0).toUpperCase() || currentUser?.first_name?.charAt(0).toUpperCase() || 'U'
+                      )}
                     </button>
 
                     {showUserDropdown && (
@@ -352,6 +477,15 @@ export default function Home() {
                           <UserDisplay name={userName} size="sm" telegramId={getUserTelegramId(userName)} />
                         </div>
                         <div className="space-y-1">
+                          <button
+                            onClick={() => {
+                              setShowUserDropdown(false);
+                              handleOpenProfileModal();
+                            }}
+                            className="w-full text-left py-2 px-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-2"
+                          >
+                            👤 แก้ไขโปรไฟล์
+                          </button>
                           <button
                             onClick={() => {
                               setShowUserDropdown(false);
@@ -485,6 +619,175 @@ export default function Home() {
                   setSetupPin('');
                   setPinError('');
                 }}
+                className="px-4 py-2 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg text-sm font-semibold transition-colors"
+              >
+                ยกเลิก
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Profile Modal */}
+      {isProfileModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-md shadow-2xl border border-slate-100 dark:border-slate-700/60 overflow-hidden my-8 animate-in zoom-in duration-200">
+            <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                <span>👤</span> แก้ไขโปรไฟล์ส่วนตัว
+              </h2>
+              <button
+                disabled={isSavingProfile}
+                onClick={() => setIsProfileModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-350 p-1 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-full transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              {profileError && (
+                <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs py-2 px-3 rounded-lg border border-red-100 dark:border-red-800 text-center font-medium">
+                  {profileError}
+                </div>
+              )}
+              {profileSuccess && (
+                <div className="bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-xs py-2 px-3 rounded-lg border border-green-100 dark:border-green-800 text-center font-medium">
+                  {profileSuccess}
+                </div>
+              )}
+
+              {/* Avatar Section */}
+              <div className="flex flex-col items-center gap-2 pb-2">
+                <div className="relative group">
+                  <div className="w-20 h-20 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold shadow-md">
+                    {profileAvatarPreview ? (
+                      <img src={profileAvatarPreview} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      profileData.nickname?.charAt(0).toUpperCase() || profileData.firstName?.charAt(0).toUpperCase() || 'U'
+                    )}
+                  </div>
+                  <label className="absolute inset-0 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center text-white text-xs opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity font-semibold">
+                    เปลี่ยนรูป
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          if (file.size > 2 * 1024 * 1024) {
+                            setProfileError('ขนาดไฟล์ภาพต้องไม่เกิน 2MB');
+                            return;
+                          }
+                          setProfileError('');
+                          setProfileAvatarFile(file);
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setProfileAvatarPreview(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                <p className="text-[10px] text-gray-400 dark:text-gray-500">รองรับ JPG, PNG, WEBP (ขนาดไม่เกิน 2MB)</p>
+              </div>
+
+              {/* Fields */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">ชื่อจริง</label>
+                  <input
+                    type="text"
+                    value={profileData.firstName}
+                    onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
+                    className="w-full px-3 py-1.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">นามสกุล</label>
+                  <input
+                    type="text"
+                    value={profileData.lastName}
+                    onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
+                    className="w-full px-3 py-1.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">ชื่อเล่น</label>
+                  <input
+                    type="text"
+                    value={profileData.nickname}
+                    onChange={(e) => setProfileData({ ...profileData, nickname: e.target.value })}
+                    className="w-full px-3 py-1.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">แผนก</label>
+                  <select
+                    value={profileData.department}
+                    onChange={(e) => setProfileData({ ...profileData, department: e.target.value })}
+                    className="w-full px-3 py-1.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                  >
+                    <option value="">เลือกแผนก</option>
+                    {DEPARTMENTS.map((dept) => (
+                      <option key={dept.value} value={dept.value}>
+                        {dept.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">อีเมล</label>
+                <input
+                  type="email"
+                  value={profileData.email}
+                  onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                  className="w-full px-3 py-1.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Telegram Chat ID</label>
+                <input
+                  type="text"
+                  value={profileData.telegramId}
+                  onChange={(e) => setProfileData({ ...profileData, telegramId: e.target.value })}
+                  className="w-full px-3 py-1.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                  placeholder="เช่น 123456789"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">รหัสผ่านใหม่ (ปล่อยว่างหากไม่ต้องการเปลี่ยน)</label>
+                <input
+                  type="password"
+                  value={profileData.password}
+                  onChange={(e) => setProfileData({ ...profileData, password: e.target.value })}
+                  className="w-full px-3 py-1.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                  placeholder="รหัสผ่านใหม่อย่างน้อย 6 ตัวอักษร"
+                />
+              </div>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-800/80 p-4 border-t border-slate-100 dark:border-slate-700 flex gap-2">
+              <button
+                disabled={isSavingProfile}
+                onClick={handleSaveProfile}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+              >
+                {isSavingProfile ? 'กำลังบันทึก...' : 'บันทึกโปรไฟล์'}
+              </button>
+              <button
+                disabled={isSavingProfile}
+                onClick={() => setIsProfileModalOpen(false)}
                 className="px-4 py-2 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg text-sm font-semibold transition-colors"
               >
                 ยกเลิก

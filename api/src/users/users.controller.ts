@@ -11,11 +11,17 @@ import {
   UseGuards,
   UnauthorizedException,
   ForbiddenException,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import * as express from 'express';
 import { Role } from '@prisma/client';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import * as path from 'path';
+import * as fs from 'fs';
 
 @Controller('users')
 export class UsersController {
@@ -155,5 +161,69 @@ export class UsersController {
     }
     await this.usersService.remove(id);
     return { data: { success: true } };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/avatar')
+  @UseInterceptors(
+    FileInterceptor('avatar', {
+      storage: diskStorage({
+        destination: (req: any, file: any, cb: any) => {
+          const dir = path.join(process.cwd(), 'uploads');
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+          // Clean up existing avatar files for this user to avoid duplicates with different extensions
+          const userId = req.params.id;
+          try {
+            fs.readdirSync(dir).forEach((f) => {
+              if (f.startsWith(`avatar-${userId}`)) {
+                try {
+                  fs.unlinkSync(path.join(dir, f));
+                } catch (err) {
+                  // ignore
+                }
+              }
+            });
+          } catch (e) {
+            // ignore
+          }
+          cb(null, dir);
+        },
+        filename: (req: any, file: any, cb: any) => {
+          const userId = req.params.id;
+          const ext = path.extname(file.originalname).toLowerCase();
+          cb(null, `avatar-${userId}${ext}`);
+        },
+      }),
+      fileFilter: (req: any, file: any, cb: any) => {
+        const allowedTypes = /jpeg|jpg|png|gif|webp/;
+        const ext = path.extname(file.originalname).toLowerCase();
+        const mime = file.mimetype;
+        if (allowedTypes.test(ext) && allowedTypes.test(mime)) {
+          cb(null, true);
+        } else {
+          cb(new Error('รองรับเฉพาะไฟล์รูปภาพเท่านั้น (jpg, jpeg, png, gif, webp)'), false);
+        }
+      },
+      limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+    }),
+  )
+  async uploadAvatar(
+    @Param('id') id: string,
+    @UploadedFile() file: any,
+    @Req() req: express.Request,
+  ) {
+    const currentUser = req.user as any;
+    if (currentUser.role !== Role.ADMIN && currentUser.id !== id) {
+      throw new ForbiddenException('ไม่มีสิทธิ์แก้ไขข้อมูลผู้ใช้อื่น');
+    }
+    if (!file) {
+      throw new Error('กรุณาเลือกไฟล์รูปภาพ');
+    }
+
+    const avatarUrl = `/uploads/${file.filename}`;
+    await this.usersService.update(id, { avatarUrl });
+    return { data: { avatar_url: avatarUrl } };
   }
 }

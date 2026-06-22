@@ -51,6 +51,19 @@ export default function TaskCard({ task, compact = false, currentUserName, users
     return user?.telegram_id || undefined;
   };
 
+  const getAvatarUrl = () => {
+    if (!users) return task.avatar_url || undefined;
+    const nameOrId = task.created_by_name || task.assignee;
+    const user = users.find(u => {
+      if (u.id === nameOrId || u.username === nameOrId || u.first_name === nameOrId) return true;
+      if (formatUserDisplayName(u) === nameOrId) return true;
+      if (u.first_name && nameOrId.includes(`(${u.first_name})`)) return true;
+      if (u.username && nameOrId.includes(`(${u.username})`)) return true;
+      return false;
+    });
+    return user?.avatar_url || task.avatar_url || undefined;
+  };
+
   const statusConfig = STATUS_CONFIG[task.status];
   const progressColor =
     task.progress === 100
@@ -254,11 +267,11 @@ export default function TaskCard({ task, compact = false, currentUserName, users
           {/* Row 1: Assignee + Created date */}
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              {task.avatar_url ? (
+              {getAvatarUrl() ? (
                 <img
-                  src={task.avatar_url}
+                  src={getAvatarUrl()}
                   alt={task.created_by_name || task.assignee}
-                  className="w-6 h-6 rounded-full"
+                  className="w-6 h-6 rounded-full object-cover"
                 />
               ) : (
                 <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold shadow-sm">

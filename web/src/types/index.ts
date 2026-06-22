@@ -3,7 +3,7 @@ export interface Task {
   title: string;
   description: string;
   progress: number;
-  deadline: string;
+  deadline?: string | null;
   status: 'todo' | 'in_progress' | 'review' | 'done';
   assignee: string;
   manager?: string | null;
@@ -60,6 +60,7 @@ export interface User {
   telegram_id?: string;
   is_ad_auth?: boolean;
   last_access?: string | null;
+  avatar_url?: string | null;
   created_at: string;
 }
 
