@@ -116,6 +116,81 @@ export default function TasksPage() {
     }
   };
 
+  const handleExportExcel = () => {
+    const headers = [
+      'หัวข้อภารกิจ',
+      'รายละเอียด',
+      'เจ้าของโครงการ',
+      'สถานะ',
+      'ความคืบหน้า',
+      'ผู้รับผิดชอบ',
+      'ผู้จัดการ',
+      'ผู้ร่วมงาน',
+      'กำหนดส่ง',
+      'ผู้สร้างงาน',
+      'วันที่สร้างงาน',
+      'อัปเดตล่าสุด',
+      'อัปเดตความคืบหน้าล่าสุด'
+    ];
+
+    const statusMap: Record<string, string> = {
+      todo: 'To Do',
+      in_progress: 'Doing',
+      review: 'Review',
+      done: 'Done'
+    };
+
+    const csvRows = [
+      headers.join(','),
+      ...filteredTasks.map(t => {
+        const title = `"${(t.title || '').replace(/"/g, '""')}"`;
+        const desc = `"${(t.description || '').replace(/"/g, '""')}"`;
+        const projOwner = `"${(t.project_owner || '').replace(/"/g, '""')}"`;
+        const status = `"${statusMap[t.status] || t.status}"`;
+        const progress = `"${t.progress || 0}%"`;
+        const assignee = `"${(t.assignee || '').replace(/"/g, '""')}"`;
+        const manager = `"${(t.manager || '').replace(/"/g, '""')}"`;
+        const collaborators = `"${(t.collaborators || []).join(', ').replace(/"/g, '""')}"`;
+        const deadline = `"${t.deadline ? new Date(t.deadline).toLocaleDateString('th-TH') : '—'}"`;
+        const createdBy = `"${(t.created_by_name || '').replace(/"/g, '""')}"`;
+        const createdAt = `"${t.created_at ? new Date(t.created_at).toLocaleString('th-TH') : '—'}"`;
+        const updatedAt = `"${t.updated_at ? new Date(t.updated_at).toLocaleString('th-TH') : '—'}"`;
+        
+        let latestUpdate = t.latest_update || '';
+        const sections = latestUpdate.split(/---\r?\n|---/g).map(s => s.trim()).filter(Boolean);
+        const firstSec = sections[0] || '';
+        const cleanUpdate = firstSec.replace(/\[attachment:([^|\]]+)\|name:([^\]]+)\]/g, '').trim();
+        const latestUpdateEscaped = `"${cleanUpdate.replace(/"/g, '""')}"`;
+
+        return [
+          title,
+          desc,
+          projOwner,
+          status,
+          progress,
+          assignee,
+          manager,
+          collaborators,
+          deadline,
+          createdBy,
+          createdAt,
+          updatedAt,
+          latestUpdateEscaped
+        ].join(',');
+      })
+    ];
+
+    const csvContent = '\uFEFF' + csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `tasks_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const filteredTasks = statusFilter === 'all'
     ? tasks
     : tasks.filter(t => t.status === statusFilter);
@@ -131,12 +206,20 @@ export default function TasksPage() {
             <h1 className="text-xl font-extrabold text-gray-900 dark:text-gray-100">
               {creatorFilter ? `📋 งานของ ${creatorFilter.match(/^([^\s(]+)/)?.[1] || creatorFilter}` : '📋 งานทั้งหมด'}
             </h1>
-            <Link
-              href="/tasks/new"
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
-            >
-              ➕ เพิ่มงาน
-            </Link>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportExcel}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800 text-white rounded-lg text-xs sm:text-sm font-semibold transition-colors shadow-sm flex items-center gap-1.5"
+              >
+                <span>📥</span> Export Excel
+              </button>
+              <Link
+                href="/tasks/new"
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs sm:text-sm font-semibold transition-colors shadow-sm"
+              >
+                ➕ เพิ่มงาน
+              </Link>
+            </div>
           </div>
         </div>
       </header>
