@@ -260,6 +260,19 @@ export default function Home() {
     return user?.avatar_url || undefined;
   };
 
+  const formatAccessDate = (dateString?: string | null) => {
+    if (!dateString) return 'เข้าใช้งานครั้งแรก';
+    const date = new Date(dateString);
+    return date.toLocaleString('th-TH', {
+      timeZone: 'Asia/Bangkok',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   const handleLogout = () => {
     authLogout();
   };
@@ -388,6 +401,11 @@ export default function Home() {
                         <div className="border-b border-slate-100 dark:border-slate-700 pb-2 mb-2">
                           <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">ผู้เข้าใช้งาน</p>
                           <UserDisplay name={userName} size="sm" telegramId={getUserTelegramId(userName)} />
+                          {currentUser?.previous_access && (
+                            <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-1">
+                              🕒 เข้าใช้ล่าสุด: <span className="font-medium text-slate-600 dark:text-slate-300">{formatAccessDate(currentUser.previous_access)}</span>
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <button
@@ -483,6 +501,11 @@ export default function Home() {
                         <div className="border-b border-slate-100 dark:border-slate-700 pb-2 mb-2">
                           <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">ผู้เข้าใช้งาน</p>
                           <UserDisplay name={userName} size="sm" telegramId={getUserTelegramId(userName)} />
+                          {currentUser?.previous_access && (
+                            <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-1">
+                              🕒 เข้าใช้ล่าสุด: <span className="font-medium text-slate-600 dark:text-slate-300">{formatAccessDate(currentUser.previous_access)}</span>
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <button

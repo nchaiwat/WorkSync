@@ -154,6 +154,14 @@ export class AuthService {
         return null;
       }
 
+      // Check if password matches locally first to reduce calls to AD Gateway
+      const isLocalMatch = await bcrypt.compare(pass, user.password);
+      if (isLocalMatch) {
+        await this.recordLoginLog(user.username, 'AD', ipAddress, 'ACCEPT', 'เข้าสู่ระบบผ่าน Active Directory สำเร็จ (ใช้ข้อมูลที่แคชไว้)');
+        const { password, ...result } = user;
+        return result;
+      }
+
       try {
         const adResult = await this.authenticateViaADGateway(user.username, pass);
         if (!adResult.success) {
@@ -252,5 +260,22 @@ export class AuthService {
       is_ad_auth: (user as any).isAdAuth ?? false,
       last_access: (user as any).lastAccess ? (user as any).lastAccess.toISOString() : null,
     };
+  }
+
+  async getUserPreviousAccess(username: string): Promise<Date | null> {
+    const logs = await this.prisma.loginLog.findMany({
+      where: {
+        username,
+        status: 'ACCEPT',
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 2,
+    });
+    if (logs.length >= 2) {
+      return logs[1].createdAt;
+    }
+    return null;
   }
 }

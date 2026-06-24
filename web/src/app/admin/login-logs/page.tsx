@@ -201,12 +201,12 @@ export default function AdminLoginLogsPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-50 dark:bg-slate-800/50 border-b border-gray-200 dark:border-slate-700">
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">วัน-เวลา</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Username</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">รูปแบบล็อกอิน</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Client IP</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">สถานะการทำงาน</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">รายละเอียด / เหตุผล</th>
+                  <th className="px-6 py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">วัน-เวลา</th>
+                  <th className="px-6 py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Username</th>
+                  <th className="px-6 py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">รูปแบบล็อกอิน</th>
+                  <th className="px-6 py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Client IP</th>
+                  <th className="px-6 py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">สถานะการทำงาน</th>
+                  <th className="px-6 py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">รายละเอียด / เหตุผล</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
@@ -238,16 +238,16 @@ export default function AdminLoginLogsPage() {
 
                     return (
                       <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/80 transition-colors">
-                        <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
+                        <td className="px-6 py-1.5 text-sm text-gray-600 dark:text-gray-300">
                           {formatDate(log.createdAt)}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-1.5">
                           <span className="font-semibold text-gray-900 dark:text-gray-100">
-                            @{log.username}
+                            {log.username}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex px-2 py-1 rounded text-xs font-semibold border ${
+                        <td className="px-6 py-1.5">
+                          <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold border ${
                             log.authType === 'AD'
                               ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-900'
                               : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900'
@@ -255,15 +255,15 @@ export default function AdminLoginLogsPage() {
                             {log.authType === 'AD' ? '🏢 Active Directory' : '👤 Local System'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-sm font-mono text-gray-600 dark:text-gray-300">
+                        <td className="px-6 py-1.5 text-sm font-mono text-gray-600 dark:text-gray-300">
                           {log.ipAddress}
                         </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium border ${statusBadgeClass}`}>
+                        <td className="px-6 py-1.5">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${statusBadgeClass}`}>
                             {log.status}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
+                        <td className="px-6 py-1.5 text-sm text-gray-600 dark:text-gray-300">
                           {log.message || '-'}
                         </td>
                       </tr>

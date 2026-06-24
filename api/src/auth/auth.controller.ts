@@ -66,6 +66,21 @@ export class AuthController {
   @Get('users/me')
   async getMe(@Req() req: express.Request) {
     const user = req.user as any;
-    return { data: this.authService.formatUser(user) };
+    const formatted = this.authService.formatUser(user);
+
+    let previousAccess: string | null = null;
+    try {
+      const prev = await this.authService.getUserPreviousAccess(user.username);
+      previousAccess = prev ? prev.toISOString() : null;
+    } catch (err) {
+      console.error('Failed to get user previous access time:', err);
+    }
+
+    return {
+      data: {
+        ...formatted,
+        previous_access: previousAccess,
+      },
+    };
   }
 }

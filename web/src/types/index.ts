@@ -61,6 +61,7 @@ export interface User {
   telegram_id?: string;
   is_ad_auth?: boolean;
   last_access?: string | null;
+  previous_access?: string | null;
   avatar_url?: string | null;
   created_at: string;
 }
