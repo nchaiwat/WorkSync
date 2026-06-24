@@ -38,7 +38,7 @@ export class AuthService {
   private async authenticateViaADGateway(
     username: string,
     password: string,
-  ): Promise<{ success: boolean; token?: string }> {
+  ): Promise<{ success: boolean; token?: string; message?: string }> {
     const gatewayUrl = this.configService.get<string>('AD_GATEWAY_URL') || 'http://172.17.0.1:3100/api/v2/login';
     const appId = this.configService.get<string>('AD_APP_ID') || 'worksync';
     const secretKey = this.configService.get<string>('AD_SECRET_KEY') || 'EAAD6F0F70CE84DF67037F2D835511927D964493B7BB986C61CF20272D9A87EC';
@@ -57,6 +57,9 @@ export class AuthService {
     };
 
     try {
+      console.log(`[AD Auth Request] Target: ${gatewayUrl}`);
+      console.log(`[AD Auth Request] Payload: ${JSON.stringify({ ...payload, password: '***' })}`);
+
       const res = await fetch(gatewayUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -64,21 +67,30 @@ export class AuthService {
         signal: AbortSignal.timeout(10000), // 10 second timeout
       });
 
+      const responseText = await res.clone().text().catch(() => '');
+      console.log(`[AD Auth Response] Status: ${res.status}, Body: ${responseText}`);
+
       if (!res.ok) {
         let message = `AD Gateway returned status ${res.status}`;
         try {
-          const err = await res.json();
+          const err = JSON.parse(responseText);
           message = err.message || message;
         } catch {}
         throw new Error(message);
       }
 
-      const result = await res.json() as { status: string; token?: string };
+      let result: any = {};
+      try {
+        result = JSON.parse(responseText);
+      } catch {}
+
       return {
         success: result.status === 'success',
         token: result.token,
+        message: result.message,
       };
     } catch (err: any) {
+      console.error(`[AD Auth Exception] Error: ${err.message}`);
       throw new Error(err.message || 'ไม่สามารถเชื่อมต่อ AD Gateway ได้');
     }
   }
@@ -145,7 +157,13 @@ export class AuthService {
       try {
         const adResult = await this.authenticateViaADGateway(user.username, pass);
         if (!adResult.success) {
-          await this.recordLoginLog(user.username, 'AD', ipAddress, 'REJECT', 'รหัสผ่าน AD ไม่ถูกต้อง หรือบัญชีไม่มีสิทธิ์ในกลุ่ม AD');
+          await this.recordLoginLog(
+            user.username,
+            'AD',
+            ipAddress,
+            'REJECT',
+            adResult.message || 'รหัสผ่าน AD ไม่ถูกต้อง หรือบัญชีไม่มีสิทธิ์ในกลุ่ม AD',
+          );
           return null;
         }
 
