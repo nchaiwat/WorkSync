@@ -4,7 +4,7 @@ import { LoginLogsService } from './login-logs.service';
 import { Role } from '@prisma/client';
 import * as express from 'express';
 
-@Controller('admin/login-logs')
+@Controller('auth/login-logs')
 export class LoginLogsController {
   constructor(private readonly loginLogsService: LoginLogsService) {}
 

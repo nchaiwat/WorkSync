@@ -184,7 +184,7 @@ export const admin = {
   },
 
   async getLoginLogs(token: string) {
-    const res = await fetch(`${API_BASE}/admin/login-logs`, {
+    const res = await fetch(`${API_BASE}/auth/login-logs`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {

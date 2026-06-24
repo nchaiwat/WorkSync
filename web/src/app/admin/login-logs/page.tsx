@@ -73,6 +73,7 @@ export default function AdminLoginLogsPage() {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleString('th-TH', {
+      timeZone: 'Asia/Bangkok',
       day: 'numeric',
       month: 'short',
       year: 'numeric',
