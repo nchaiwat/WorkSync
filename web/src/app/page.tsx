@@ -322,6 +322,13 @@ export default function Home() {
       const nicknameMatch = name.match(/^([^\s(]+)/);
       const nickname = nicknameMatch ? nicknameMatch[1] : name.charAt(0);
       
+      let latestTime = '';
+      if (memberTasks.length > 0) {
+        const times = memberTasks.map(t => new Date(t.updated_at).getTime());
+        const maxTime = Math.max(...times);
+        latestTime = new Date(maxTime).toISOString();
+      }
+
       return {
         name,
         avatar_url: getUserAvatarUrl(name) || '',
@@ -332,6 +339,7 @@ export default function Home() {
           memberTasks.reduce((sum, t) => sum + (t.progress || 0), 0) / (memberTasks.length || 1)
         ),
         telegram_id: getUserTelegramId(name),
+        last_update: latestTime || undefined,
       };
     });
   }, [tasks, users]);

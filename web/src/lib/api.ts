@@ -269,6 +269,29 @@ export async function uploadAvatar(userId: string, file: File): Promise<{ avatar
   return result.data;
 }
 
+export async function uploadTaskFile(taskId: string, file: File): Promise<{ url: string; filename: string }> {
+  const url = `${API_BASE}/items/tasks/${taskId}/upload`;
+  const authHeaders = getAuthHeaders();
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      ...authHeaders,
+    },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`อัปโหลดล้มเหลว: ${errorText}`);
+  }
+
+  const result = await res.json();
+  return result.data;
+}
+
 // ─── Export API object ──────────────────────────────────────────────
 
 export const api = {
@@ -289,4 +312,5 @@ export const api = {
   checkDirectusHealth,
   updateUser,
   uploadAvatar,
+  uploadTaskFile,
 };

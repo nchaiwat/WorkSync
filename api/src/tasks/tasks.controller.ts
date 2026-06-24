@@ -10,12 +10,18 @@ import {
   Req,
   UseGuards,
   ForbiddenException,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { UsersService } from '../users/users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import * as express from 'express';
 import { Role } from '@prisma/client';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import * as path from 'path';
+import * as fs from 'fs';
 
 @Controller('items/tasks')
 export class TasksController {
@@ -121,5 +127,44 @@ export class TasksController {
 
     await this.tasksService.remove(id);
     return { data: { success: true } };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (req: any, file: any, cb: any) => {
+          const dir = path.join(process.cwd(), 'uploads');
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+          cb(null, dir);
+        },
+        filename: (req: any, file: any, cb: any) => {
+          const taskId = req.params.id;
+          const timestamp = Date.now();
+          const ext = path.extname(file.originalname).toLowerCase();
+          const baseName = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '_');
+          cb(null, `task-${taskId}-${timestamp}-${baseName}${ext}`);
+        },
+      }),
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    }),
+  )
+  async uploadFile(
+    @Param('id') id: string,
+    @UploadedFile() file: any,
+  ) {
+    if (!file) {
+      throw new Error('กรุณาเลือกไฟล์');
+    }
+    const fileUrl = `/uploads/${file.filename}`;
+    return {
+      data: {
+        url: fileUrl,
+        filename: file.originalname,
+      }
+    };
   }
 }

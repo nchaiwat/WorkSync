@@ -35,6 +35,7 @@ export interface TeamMember {
   completedTasks: number;
   overallProgress: number;
   telegram_id?: string;
+  last_update?: string;
 }
 
 export type TaskFormData = Omit<Task, 'id' | 'created_at' | 'updated_at'>;

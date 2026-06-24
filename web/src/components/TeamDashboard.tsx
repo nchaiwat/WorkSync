@@ -29,6 +29,19 @@ function getInitials(name: string): string {
   return name.charAt(0);
 }
 
+const formatThaiDate = (dateStr?: string) => {
+  if (!dateStr) return 'ไม่มีการอัปเดต';
+  const date = new Date(dateStr);
+  return date.toLocaleString('th-TH', {
+    day: 'numeric',
+    month: 'short',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Asia/Bangkok',
+  }) + ' น.';
+};
+
 
 
 export default function TeamDashboard({ members, loading, isMyTasks = false }: TeamDashboardProps) {
@@ -111,6 +124,11 @@ export default function TeamDashboard({ members, loading, isMyTasks = false }: T
                 <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mt-0.5">
                   {member.completedTasks}/{member.totalTasks} tasks
                 </p>
+                {member.last_update && (
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+                    อัปเดตล่าสุด: {formatThaiDate(member.last_update)}
+                  </p>
+                )}
               </div>
             </div>
             

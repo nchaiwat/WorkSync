@@ -23,6 +23,10 @@ interface ParsedUpdate {
   timestamp: string;
   content: string;
   raw: string;
+  attachment?: {
+    url: string;
+    name: string;
+  };
 }
 
 function parseTaskUpdates(latestUpdateText: string | null | undefined): ParsedUpdate[] {
@@ -34,18 +38,42 @@ function parseTaskUpdates(latestUpdateText: string | null | undefined): ParsedUp
     .map(sec => {
       const tsMatch = sec.match(/^\[([^\]]+)\]/);
       if (tsMatch) {
+        const fullContent = sec.slice(tsMatch[0].length).trim();
+        const attachMatch = fullContent.match(/\[attachment:([^|\]]+)\|name:([^\]]+)\]/);
+        let content = fullContent;
+        let attachment;
+        if (attachMatch) {
+          content = fullContent.replace(attachMatch[0], '').trim();
+          attachment = {
+            url: attachMatch[1],
+            name: attachMatch[2],
+          };
+        }
         return {
           key: tsMatch[0], // e.g. "[11 มิ.ย. 2569 08:30]"
           timestamp: tsMatch[1],
-          content: sec.slice(tsMatch[0].length).trim(),
-          raw: sec
+          content: content,
+          raw: sec,
+          attachment,
+        };
+      }
+
+      const attachMatch = sec.match(/\[attachment:([^|\]]+)\|name:([^\]]+)\]/);
+      let content = sec;
+      let attachment;
+      if (attachMatch) {
+        content = sec.replace(attachMatch[0], '').trim();
+        attachment = {
+          url: attachMatch[1],
+          name: attachMatch[2],
         };
       }
       return {
         key: sec,
         timestamp: 'อัปเดตงาน',
-        content: sec,
-        raw: sec
+        content: content,
+        raw: sec,
+        attachment,
       };
     });
 }
@@ -63,6 +91,7 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
   const [newUpdateText, setNewUpdateText] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Comments & Replies States
   const [comments, setComments] = useState<TaskComment[]>([]);
@@ -189,17 +218,23 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
     if (!newUpdateText.trim()) return;
     setIsSaving(true);
     try {
+      let attachmentText = '';
+      if (selectedFile) {
+        const uploadRes = await api.uploadTaskFile(task.id, selectedFile);
+        attachmentText = `\n[attachment:${uploadRes.url}|name:${uploadRes.filename}]`;
+      }
       const timestamp = new Date().toLocaleString('th-TH', { 
         year: 'numeric', month: 'short', day: 'numeric', 
         hour: '2-digit', minute: '2-digit' 
       });
-      const appendedUpdate = `[${timestamp}] ${newUpdateText.trim()}\n${task.latest_update ? '---\n' + task.latest_update : ''}`;
+      const appendedUpdate = `[${timestamp}] ${newUpdateText.trim()}${attachmentText}\n${task.latest_update ? '---\n' + task.latest_update : ''}`;
       
       const updated = await api.updateTask(task.id, { latest_update: appendedUpdate });
       onUpdate(updated);
       setNewUpdateText(''); // clear input
-    } catch (err) {
-      alert('บันทึกไม่สำเร็จ');
+      setSelectedFile(null); // clear file selection
+    } catch (err: any) {
+      alert(err.message || 'บันทึกไม่สำเร็จ');
     } finally {
       setIsSaving(false);
     }
@@ -729,6 +764,39 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
               rows={2}
               className="w-full px-4 py-3 rounded-xl border border-blue-300 dark:border-blue-600 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-600 focus:outline-none text-sm shadow-sm"
             />
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <label className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-750 border border-slate-350 dark:border-slate-600 rounded-xl cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors shadow-sm select-none">
+                <span>📎</span> แนบไฟล์ (เอกสาร/รูปภาพ ไม่เกิน 10MB)
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      if (file.size > 10 * 1024 * 1024) {
+                        alert('ขนาดไฟล์ต้องไม่เกิน 10MB');
+                        e.target.value = '';
+                        return;
+                      }
+                      setSelectedFile(file);
+                    }
+                  }}
+                />
+              </label>
+              {selectedFile && (
+                <div className="flex items-center gap-2 bg-blue-100/50 dark:bg-slate-750 px-3 py-1.5 rounded-lg border border-blue-200 dark:border-slate-650 text-xs font-medium text-blue-800 dark:text-slate-200 shadow-inner animate-in fade-in slide-in-from-left-2 duration-150">
+                  <span className="truncate max-w-[200px]">📄 {selectedFile.name}</span>
+                  <span className="text-[10px] text-gray-500">({(selectedFile.size / (1024 * 1024)).toFixed(2)} MB)</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFile(null)}
+                    className="text-red-500 hover:text-red-700 font-bold ml-1 transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               onClick={handleSaveLatestUpdate}
               disabled={isSaving || !newUpdateText.trim()}
@@ -754,6 +822,20 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                     <span>🕒 {update.timestamp}</span>
                   </div>
                   <div className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap leading-relaxed">{update.content}</div>
+                  {update.attachment && (
+                    <div className="mt-2 pt-1">
+                      <a
+                        href={update.attachment.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/60 dark:hover:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors shadow-sm max-w-full"
+                      >
+                        <span>📎 ไฟล์แนบ:</span>
+                        <span className="truncate max-w-[250px]">{update.attachment.name}</span>
+                        <span className="text-[10px] text-gray-400 font-normal">📥 คลิกดาวน์โหลด</span>
+                      </a>
+                    </div>
+                  )}
 
                   <div className="pt-2 border-t border-gray-100 dark:border-slate-700 space-y-2">
                     <div className="text-xs font-bold text-gray-500 dark:text-gray-400">ความคิดเห็นต่ออัปเดตนี้ ({commentsForUpdate.length})</div>
