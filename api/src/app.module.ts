@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { TasksModule } from './tasks/tasks.module';
 import { CommentsModule } from './comments/comments.module';
+import { LoginLogsModule } from './login-logs/login-logs.module';
 
 import { AppController } from './app.controller';
 
@@ -20,6 +21,7 @@ import { AppController } from './app.controller';
     UsersModule,
     TasksModule,
     CommentsModule,
+    LoginLogsModule,
   ],
   controllers: [AppController],
 })

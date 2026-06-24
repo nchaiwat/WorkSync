@@ -18,14 +18,14 @@ export function getOrCreateDeviceToken(): string {
   return token;
 }
 
-export async function login(identifier: string, password: string) {
+export async function login(identifier: string, password: string, authType: 'ad' | 'local' = 'local') {
   const device_token = getOrCreateDeviceToken();
   
   // NestJS backend accepts username or email in the email field.
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: identifier, password, device_token }),
+    body: JSON.stringify({ email: identifier, password, device_token, auth_type: authType }),
   });
 
   if (!res.ok) {
@@ -181,6 +181,17 @@ export const admin = {
       headers: { Authorization: `Bearer ${token}` },
     });
     return res.ok;
+  },
+
+  async getLoginLogs(token: string) {
+    const res = await fetch(`${API_BASE}/admin/login-logs`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      throw new Error('ไม่สามารถดึงข้อมูลประวัติการเข้าใช้งานได้');
+    }
+    const data = await res.json();
+    return data;
   },
 };
 

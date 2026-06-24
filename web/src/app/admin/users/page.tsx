@@ -193,6 +193,22 @@ export default function AdminUsersPage() {
               </button>
             </div>
           </div>
+
+          {/* Navigation Tabs */}
+          <div className="flex gap-6 mt-4 border-t border-gray-100 dark:border-slate-700 pt-3">
+            <Link
+              href="/admin/users"
+              className="text-sm font-semibold text-blue-600 dark:text-blue-400 border-b-2 border-blue-500 pb-2"
+            >
+              👥 ผู้ใช้งานในระบบ
+            </Link>
+            <Link
+              href="/admin/login-logs"
+              className="text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              📋 ประวัติการเข้าใช้งาน
+            </Link>
+          </div>
         </div>
       </header>
 

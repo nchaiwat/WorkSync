@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { User } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AuthService {
@@ -12,13 +13,13 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly prisma: PrismaService,
   ) {}
 
-  // ─── AES-256-GCM Encryption ─────────────────────────────────────────────
+  // ─── AES-256-GCM Encryption (Deprecating but keeping if needed elsewhere) ─
 
   private encryptPayload(data: object): { iv: string; encrypted: string; authTag: string } {
     const sharedKey = this.configService.get<string>('AD_SHARED_KEY') || '';
-    // Derive a 32-byte key from the shared key string
     const key = crypto.createHash('sha256').update(sharedKey).digest();
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
@@ -32,21 +33,26 @@ export class AuthService {
     };
   }
 
-  // ─── AD Authentication via On-Premise Agent ─────────────────────────────
+  // ─── AD Gateway Authentication ──────────────────────────────────────────
 
-  private async authenticateViaAD(
+  private async authenticateViaADGateway(
     username: string,
     password: string,
-  ): Promise<{ success: boolean; telegram_id?: string }> {
-    const agentUrl = this.configService.get<string>('AD_AGENT_URL');
-    if (!agentUrl) {
-      throw new UnauthorizedException('AD Agent ยังไม่ได้ถูกตั้งค่า กรุณาติดต่อผู้ดูแลระบบ');
-    }
+  ): Promise<{ success: boolean; token?: string }> {
+    const gatewayUrl = this.configService.get<string>('AD_GATEWAY_URL') || 'http://172.17.0.1:3100/api/v2/login';
+    const appId = this.configService.get<string>('AD_APP_ID') || 'worksync';
+    const secretKey = this.configService.get<string>('AD_SECRET_KEY') || 'EAAD6F0F70CE84DF67037F2D835511927D964493B7BB986C61CF20272D9A87EC';
 
-    const payload = this.encryptPayload({ username, password });
+    const payload = {
+      app_id: appId,
+      secret_key: secretKey,
+      username,
+      password,
+      timestamp: new Date().toISOString(),
+    };
 
     try {
-      const res = await fetch(`${agentUrl}/auth/verify`, {
+      const res = await fetch(gatewayUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -54,57 +60,114 @@ export class AuthService {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const message = (err as any).message || 'AD Authentication ล้มเหลว';
-        throw new UnauthorizedException(message);
+        let message = `AD Gateway returned status ${res.status}`;
+        try {
+          const err = await res.json();
+          message = err.message || message;
+        } catch {}
+        throw new Error(message);
       }
 
-      const result = await res.json() as { success: boolean; telegram_id?: string };
-      return result;
+      const result = await res.json() as { status: string; token?: string };
+      return {
+        success: result.status === 'success',
+        token: result.token,
+      };
     } catch (err: any) {
-      if (err instanceof UnauthorizedException) throw err;
-      throw new UnauthorizedException('ไม่สามารถเชื่อมต่อ AD Agent ได้ กรุณาตรวจสอบการเชื่อมต่อ');
+      throw new Error(err.message || 'ไม่สามารถเชื่อมต่อ AD Gateway ได้');
+    }
+  }
+
+  // ─── Record Login Logs ──────────────────────────────────────────────────
+
+  private async recordLoginLog(
+    username: string,
+    authType: 'AD' | 'LOCAL',
+    ipAddress: string,
+    status: 'ACCEPT' | 'REJECT' | 'DENIED' | 'ERROR',
+    message?: string,
+  ) {
+    try {
+      await this.prisma.loginLog.create({
+        data: {
+          username,
+          authType,
+          ipAddress,
+          status,
+          message,
+        },
+      });
+    } catch (err) {
+      console.error('Failed to write login log:', err);
     }
   }
 
   // ─── User Validation ────────────────────────────────────────────────────
 
-  async validateUser(identifier: string, pass: string): Promise<any> {
+  async validateUser(
+    identifier: string,
+    pass: string,
+    authType: 'ad' | 'local' = 'local',
+    ipAddress: string = 'unknown',
+  ): Promise<any> {
+    const loginMode = authType === 'ad' ? 'AD' : 'LOCAL';
+
     // lookup by email or username
     let user = await this.usersService.findOneByEmail(identifier);
     if (!user) {
       user = await this.usersService.findOneByUsername(identifier);
     }
 
-    if (!user || user.status !== 'active') return null;
+    // 1. User not found in system
+    if (!user) {
+      await this.recordLoginLog(identifier, loginMode, ipAddress, 'DENIED', 'ไม่พบผู้ใช้งานนี้ในระบบ WorkSync');
+      return null;
+    }
 
-    // --- AD Authentication Path ---
-    if (user.isAdAuth) {
+    // 2. User status is not active
+    if (user.status !== 'active') {
+      await this.recordLoginLog(user.username, loginMode, ipAddress, 'DENIED', `บัญชีผู้ใช้อยู่ในสถานะ ${user.status}`);
+      return null;
+    }
+
+    // 3. AD Authentication Path
+    if (authType === 'ad') {
+      if (!user.isAdAuth) {
+        await this.recordLoginLog(user.username, 'AD', ipAddress, 'DENIED', 'บัญชีผู้ใช้นี้ยังไม่เปิดการใช้งาน Active Directory Authentication');
+        return null;
+      }
+
       try {
-        const adResult = await this.authenticateViaAD(user.username, pass);
-        if (!adResult.success) return null;
-
-        // Auto-sync Telegram ID from AD Pager field if returned
-        if (adResult.telegram_id && adResult.telegram_id !== user.telegramId) {
-          await this.usersService.update(user.id, {
-            telegramId: adResult.telegram_id,
-          });
-          user = { ...user, telegramId: adResult.telegram_id };
+        const adResult = await this.authenticateViaADGateway(user.username, pass);
+        if (!adResult.success) {
+          await this.recordLoginLog(user.username, 'AD', ipAddress, 'REJECT', 'รหัสผ่าน AD ไม่ถูกต้อง หรือบัญชีไม่มีสิทธิ์ในกลุ่ม AD');
+          return null;
         }
+
+        // Sync Password to local database
+        await this.usersService.update(user.id, {
+          password: pass, // usersService.update automatically bcrypt-hashes the password
+        });
+
+        await this.recordLoginLog(user.username, 'AD', ipAddress, 'ACCEPT', 'เข้าสู่ระบบผ่าน Active Directory สำเร็จ');
 
         const { password, ...result } = user;
         return result;
-      } catch {
+      } catch (err: any) {
+        await this.recordLoginLog(user.username, 'AD', ipAddress, 'ERROR', err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อกับ AD Gateway');
         return null;
       }
     }
 
-    // --- Local Authentication Path ---
+    // 4. Local Authentication Path
     const isMatch = await bcrypt.compare(pass, user.password);
     if (isMatch) {
+      await this.recordLoginLog(user.username, 'LOCAL', ipAddress, 'ACCEPT', 'เข้าสู่ระบบสำเร็จ');
       const { password, ...result } = user;
       return result;
     }
+
+    await this.recordLoginLog(user.username, 'LOCAL', ipAddress, 'REJECT', 'รหัสผ่านไม่ถูกต้อง');
     return null;
   }
 

@@ -12,10 +12,18 @@ export class AuthController {
   ) {}
 
   @Post('auth/login')
-  async login(@Body() body: any) {
-    const user = await this.authService.validateUser(body.email, body.password);
+  async login(@Body() body: any, @Req() req: express.Request) {
+    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || 'unknown';
+    const ip = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : 'unknown';
+
+    const user = await this.authService.validateUser(
+      body.email,
+      body.password,
+      body.auth_type || 'local',
+      ip,
+    );
     if (!user) {
-      throw new UnauthorizedException('อีเมลหรือรหัสผ่านไม่ถูกต้อง');
+      throw new UnauthorizedException('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
     }
 
     if (body.device_token) {

@@ -74,3 +74,15 @@ model Comment {
 
   @@map("task_comments")
 }
+
+model LoginLog {
+  id        String   @id @default(uuid())
+  username  String
+  authType  String   @map("auth_type") // "AD" | "LOCAL"
+  ipAddress String   @map("ip_address")
+  status    String   // "ACCEPT" | "REJECT" | "DENIED" | "ERROR"
+  message   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("login_logs")
+}

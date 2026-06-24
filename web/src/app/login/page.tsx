@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loginType, setLoginType] = useState<'local' | 'ad'>('local');
 
   const [isPinMode, setIsPinMode] = useState(false);
   const [pin, setPin] = useState('');
@@ -21,6 +22,10 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      const savedType = localStorage.getItem('worksync_login_type') as 'local' | 'ad';
+      if (savedType === 'ad' || savedType === 'local') {
+        setLoginType(savedType);
+      }
       const savedUser = localStorage.getItem('worksync_last_username');
       const token = getOrCreateDeviceToken();
       setDeviceToken(token);
@@ -68,10 +73,13 @@ export default function LoginPage() {
     setIsLoading(true);
     setError('');
     try {
-      const result = await authLogin(username, password);
+      const result = await authLogin(username, password, loginType);
       document.cookie = `directus_token=${result.access_token}; path=/; max-age=900000`;
       document.cookie = `directus_refresh=${result.refresh_token}; path=/; max-age=604800`;
       document.cookie = `directus_username=${encodeURIComponent(username)}; path=/; max-age=604800`;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('worksync_login_type', loginType);
+      }
       try {
         const user = await getMe(result.access_token);
         document.cookie = `directus_first_name=${encodeURIComponent(user.first_name || '')}; path=/; max-age=604800`;
@@ -164,6 +172,40 @@ export default function LoginPage() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Type Switch Tabs */}
+              <div className="flex p-1 bg-gray-100 dark:bg-slate-700/50 rounded-xl mb-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginType('local');
+                    localStorage.setItem('worksync_login_type', 'local');
+                    setError('');
+                  }}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                    loginType === 'local'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-300'
+                  }`}
+                >
+                  👤 บัญชี WorkSync
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginType('ad');
+                    localStorage.setItem('worksync_login_type', 'ad');
+                    setError('');
+                  }}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                    loginType === 'ad'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-300'
+                  }`}
+                >
+                  🏢 บัญชี Windows AD
+                </button>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Username
@@ -198,8 +240,10 @@ export default function LoginPage() {
                     {showPassword ? '🙈' : '👁️'}
                   </button>
                 </div>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                  รองรับทั้ง WorkSync Password และ Windows AD Password
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                  {loginType === 'ad'
+                    ? 'กรุณากรอกรหัสผ่าน Windows Active Directory สำหรับเข้าสู่ระบบ'
+                    : 'รองรับการล็อกอินผ่านรหัสผ่านบัญชีระบบโดยตรง'}
                 </p>
               </div>
 
