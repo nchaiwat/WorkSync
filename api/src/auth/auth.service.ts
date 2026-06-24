@@ -43,10 +43,10 @@ export class AuthService {
     const appId = this.configService.get<string>('AD_APP_ID') || 'worksync';
     const secretKey = this.configService.get<string>('AD_SECRET_KEY') || 'EAAD6F0F70CE84DF67037F2D835511927D964493B7BB986C61CF20272D9A87EC';
 
-    // Format ISO timestamp shifted by +7 hours to match local Bangkok time
+    // Format ISO timestamp shifted by +7 hours to local Bangkok time, structured as YYYY-MM-DDTHH:mm:ssZ
     const tzoffset = 7 * 60 * 60 * 1000;
     const localTime = new Date(Date.now() + tzoffset);
-    const timestampStr = localTime.toISOString().slice(0, -1) + '+07:00';
+    const timestampStr = localTime.toISOString().split('.')[0] + 'Z';
 
     const payload = {
       app_id: appId,
