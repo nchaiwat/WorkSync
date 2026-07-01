@@ -256,8 +256,20 @@ export class UsersController {
       .filter((id): id is string => !!id && id.trim() !== '');
 
     if (telegramIds.length > 0) {
-      const announceHeader = `📢 <b>ประกาศสำคัญ (WorkSync)</b>\n${'─'.repeat(28)}\n`;
-      const formattedMessage = announceHeader + message.trim();
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('th-TH', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'Asia/Bangkok',
+      });
+      const timeStr = now.toLocaleTimeString('th-TH', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Bangkok',
+      });
+      const header = `🔄 <b>WorkSync</b>  ·  ${dateStr} ${timeStr} น.\n${'─'.repeat(28)}\n`;
+      const formattedMessage = `${header}📢 <b>ประกาศสำคัญ!</b>\n\n${message.trim()}`;
       await this.telegramService.broadcastNotification(telegramIds, formattedMessage);
     }
 
