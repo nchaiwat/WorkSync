@@ -37,7 +37,7 @@ export class TelegramController {
       timeZone: 'Asia/Bangkok',
     });
     const header = `🔄 <b>WorkSync</b>  ·  ${dateStr} ${timeStr} น.\n${'─'.repeat(28)}\n`;
-    const testMessage = `${header}🤖 <b>ระบบทดสอบการส่ง Telegram (WorkSync)</b>\n\n📝 ${message.trim()}`;
+    const testMessage = `${header}📝 ${message.trim()}`;
     await this.telegramService.sendDirectMessage(telegramId.trim(), testMessage);
 
     return { data: { success: true } };
