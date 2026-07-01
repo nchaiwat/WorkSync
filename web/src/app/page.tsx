@@ -199,10 +199,11 @@ export default function Home() {
       // SECURITY: Users should only ever see tasks they created OR are related to.
       const allRelatedTasks = result.data.filter(
         (t) =>
-          t.creator_id === currentUser?.id ||
+          !t.is_archived &&
+          (t.creator_id === currentUser?.id ||
           isUserMatch(t.assignee) ||
           isUserMatch(t.manager) ||
-          (t.collaborators && t.collaborators.some(col => isUserMatch(col)))
+          (t.collaborators && t.collaborators.some(col => isUserMatch(col))))
       );
 
       // Auto-archive Done tasks (hide if status is 'done' and updated_at/created_at is older than 7 days)
@@ -426,6 +427,13 @@ export default function Home() {
                           >
                             🔑 ตั้งค่า PIN Code
                           </button>
+                          <Link
+                            href="/tasks/archive"
+                            onClick={() => setShowUserDropdown(false)}
+                            className="w-full text-left py-2 px-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-2"
+                          >
+                            📦 คลังเอกสาร / Archive
+                          </Link>
                           <button
                             onClick={handleLogout}
                             className="w-full text-left py-2 px-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors flex items-center gap-2"
@@ -526,6 +534,13 @@ export default function Home() {
                           >
                             🔑 ตั้งค่า PIN Code
                           </button>
+                          <Link
+                            href="/tasks/archive"
+                            onClick={() => setShowUserDropdown(false)}
+                            className="w-full text-left py-2 px-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-2"
+                          >
+                            📦 คลังเอกสาร / Archive
+                          </Link>
                           <button
                             onClick={handleLogout}
                             className="w-full text-left py-2 px-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors flex items-center gap-2"

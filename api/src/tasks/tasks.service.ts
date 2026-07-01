@@ -101,6 +101,45 @@ export class TasksService {
 
   // ── CRUD ───────────────────────────────────────────────────────────────────
 
+  /**
+   * Collect Telegram IDs for all users involved in a task:
+   * Creator, Assignee, Manager, and Collaborators.
+   */
+  async getAllInvolvedTelegramIds(task: Task): Promise<string[]> {
+    const names: string[] = [];
+    if (task.assignee && task.assignee.trim()) names.push(task.assignee.trim());
+    if (task.manager && task.manager.trim()) names.push(task.manager.trim());
+
+    if (task.createdBy) {
+      const creator = await this.usersService.findOneById(task.createdBy).catch(() => null);
+      if (creator) {
+        const formatted = (() => {
+          const nick = creator.nickname ? `${creator.nickname} ` : '';
+          const first = creator.firstName || creator.username || '';
+          const dept = creator.department || 'IT';
+          return `${nick}(${first})/${dept}`;
+        })();
+        names.push(formatted);
+      }
+    }
+
+    let collabs: string[] = [];
+    if (task.collaborators) {
+      try {
+        collabs = Array.isArray(task.collaborators)
+          ? (task.collaborators as string[])
+          : JSON.parse(task.collaborators as string);
+      } catch {
+        collabs = [];
+      }
+    }
+    names.push(...collabs.filter(Boolean));
+
+    return this.resolveTelegramIds(names);
+  }
+
+  // ── CRUD ───────────────────────────────────────────────────────────────────
+
   async create(data: any): Promise<Task> {
     const task = await this.prisma.task.create({
       data: {
@@ -155,10 +194,14 @@ export class TasksService {
     return task;
   }
 
-  async findAll(filters?: { status?: string; assignee?: string }): Promise<Task[]> {
+  async findAll(filters?: { status?: string; assignee?: string; isArchived?: boolean }): Promise<Task[]> {
     const whereClause: any = {};
     if (filters?.status) whereClause.status = filters.status;
     if (filters?.assignee) whereClause.assignee = filters.assignee;
+    
+    // Default isArchived to false unless explicitly filtered
+    whereClause.isArchived = filters?.isArchived !== undefined ? filters.isArchived : false;
+
     return this.prisma.task.findMany({
       where: whereClause,
       orderBy: { createdAt: 'desc' },
@@ -193,51 +236,93 @@ export class TasksService {
     if (data.manager !== undefined) updateData.manager = data.manager;
     if (data.latest_update !== undefined) updateData.latestUpdate = data.latest_update;
     if (data.project_owner !== undefined) updateData.projectOwner = data.project_owner;
+    if (data.isArchived !== undefined) updateData.isArchived = data.isArchived;
+    if (data.archiveReason !== undefined) updateData.archiveReason = data.archiveReason;
 
     const task = await this.prisma.task.update({ where: { id }, data: updateData });
 
-    // ── Notify on Status, Progress, or Latest Update change ──
-    const statusChanged = data.status !== undefined && data.status !== oldTask.status;
-    const progressChanged = data.progress !== undefined && Number(data.progress) !== oldTask.progress;
-    const latestUpdateChanged = data.latest_update !== undefined && data.latest_update !== oldTask.latestUpdate;
+    // ── Notify on Archive or normal changes ──
+    const archivedChanged = data.isArchived !== undefined && data.isArchived !== oldTask.isArchived;
 
-    if (statusChanged || progressChanged || latestUpdateChanged) {
-      this.getTaskNotifyIds(task)
+    if (archivedChanged && task.isArchived) {
+      this.getAllInvolvedTelegramIds(task)
         .then(async (notifyIds) => {
           if (notifyIds.length > 0) {
-            const changes: string[] = [];
-            if (statusChanged) {
-              changes.push(`⚙️ <b>สถานะ:</b> ${STATUS_LABELS[oldTask.status] || oldTask.status} → ${STATUS_LABELS[task.status] || task.status}`);
-            }
-            if (progressChanged) {
-              changes.push(`📊 <b>ความคืบหน้า:</b> ${oldTask.progress}% → ${task.progress}%`);
-            }
-            if (latestUpdateChanged && task.latestUpdate) {
-              const sections = task.latestUpdate.split(/---\r?\n|---/g);
-              const firstSection = sections[0]?.trim() || '';
-              const cleanText = firstSection.replace(/^\[[^\]]+\]/, '').trim();
-              if (cleanText) {
-                changes.push(`📝 <b>ความคืบหน้าล่าสุด:</b>\n${cleanText}`);
-              }
-            }
-
+            const creatorUser = task.createdBy ? await this.usersService.findOneById(task.createdBy).catch(() => null) : null;
+            const creatorName = creatorUser ? `${creatorUser.nickname || creatorUser.firstName}` : (task.createdBy || 'ไม่ระบุ');
             const message =
               `${notifyHeader()}\n` +
-              `📈 <b>อัปเดตงาน!</b>\n\n` +
+              `📦 <b>เจ้าของโครงการได้เก็บถาวรงาน (Archive)!</b>\n\n` +
               `📌 <b>หัวข้อ:</b> ${task.title}\n` +
               `👤 <b>ผู้รับผิดชอบ:</b> ${task.assignee}\n` +
-              `📊 <b>Progress:</b> ${task.progress}%\n` +
-              changes.join('\n');
+              `👤 <b>เจ้าของงาน (Owner):</b> ${creatorName}\n` +
+              `💬 <b>เหตุผลการเก็บถาวร:</b> ${task.archiveReason || 'ไม่ระบุ'}`;
 
             await this.telegramService.broadcastNotification(notifyIds, message);
           }
         })
         .catch((err) => {
-          console.error(`Failed to send Telegram notification for task update: ${err.message}`);
+          console.error(`Failed to send Telegram notification for task archive: ${err.message}`);
         });
+    } else {
+      // ── Notify on Status, Progress, or Latest Update change ──
+      const statusChanged = data.status !== undefined && data.status !== oldTask.status;
+      const progressChanged = data.progress !== undefined && Number(data.progress) !== oldTask.progress;
+      const latestUpdateChanged = data.latest_update !== undefined && data.latest_update !== oldTask.latestUpdate;
+
+      if (statusChanged || progressChanged || latestUpdateChanged) {
+        this.getTaskNotifyIds(task)
+          .then(async (notifyIds) => {
+            if (notifyIds.length > 0) {
+              const changes: string[] = [];
+              if (statusChanged) {
+                changes.push(`⚙️ <b>สถานะ:</b> ${STATUS_LABELS[oldTask.status] || oldTask.status} → ${STATUS_LABELS[task.status] || task.status}`);
+              }
+              if (progressChanged) {
+                changes.push(`📊 <b>ความคืบหน้า:</b> ${oldTask.progress}% → ${task.progress}%`);
+              }
+              if (latestUpdateChanged && task.latestUpdate) {
+                const sections = task.latestUpdate.split(/---\r?\n|---/g);
+                const firstSection = sections[0]?.trim() || '';
+                const cleanText = firstSection.replace(/^\[[^\]]+\]/, '').trim();
+                if (cleanText) {
+                  changes.push(`📝 <b>ความคืบหน้าล่าสุด:</b>\n${cleanText}`);
+                }
+              }
+
+              const message =
+                `${notifyHeader()}\n` +
+                `📈 <b>อัปเดตงาน!</b>\n\n` +
+                `📌 <b>หัวข้อ:</b> ${task.title}\n` +
+                `👤 <b>ผู้รับผิดชอบ:</b> ${task.assignee}\n` +
+                `📊 <b>Progress:</b> ${task.progress}%\n` +
+                changes.join('\n');
+
+              await this.telegramService.broadcastNotification(notifyIds, message);
+            }
+          })
+          .catch((err) => {
+            console.error(`Failed to send Telegram notification for task update: ${err.message}`);
+          });
+      }
     }
 
     return task;
+  }
+
+  async notifyTaskDeleted(task: Task, deleterName: string, reason: string): Promise<void> {
+    const notifyIds = await this.getAllInvolvedTelegramIds(task);
+    if (notifyIds.length > 0) {
+      const message =
+        `${notifyHeader()}\n` +
+        `🗑️ <b>งานถูกลบแล้ว (Deleted)!</b>\n\n` +
+        `📌 <b>หัวข้อ:</b> ${task.title}\n` +
+        `👤 <b>ผู้รับผิดชอบ:</b> ${task.assignee}\n` +
+        `👤 <b>ผู้ลบงาน:</b> ${deleterName}\n` +
+        `💬 <b>เหตุผลการลบ:</b> ${reason || 'ไม่ระบุ'}`;
+
+      await this.telegramService.broadcastNotification(notifyIds, message);
+    }
   }
 
   async remove(id: string): Promise<void> {

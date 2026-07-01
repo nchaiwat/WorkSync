@@ -12,6 +12,7 @@ export default function TasksPage() {
   const router = useRouter();
   
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [unfilteredTasks, setUnfilteredTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [creatorFilter, setCreatorFilter] = useState<string | null>(null);
@@ -74,14 +75,20 @@ export default function TasksPage() {
       const result = await api.getTasks();
       
       // SECURITY: Users should only ever see tasks they created OR are related to.
-      let filtered = result.data.filter(
+      // Exclude archived tasks from list page
+      let relatedTasks = result.data.filter(
         (t) =>
-          t.creator_id === currentUser?.id ||
+          !t.is_archived &&
+          (t.creator_id === currentUser?.id ||
           isUserMatch(t.assignee) ||
           isUserMatch(t.manager) ||
-          (t.collaborators && t.collaborators.some((col) => isUserMatch(col)))
+          (t.collaborators && t.collaborators.some((col) => isUserMatch(col))))
       );
       
+      // Store all related tasks (ignoring status/creator filter) for full Excel export
+      setUnfilteredTasks(relatedTasks);
+
+      let filtered = [...relatedTasks];
       // Filter by creator if specified in URL
       if (creatorFilter) {
         filtered = filtered.filter(t => t.created_by_name === creatorFilter);
@@ -142,7 +149,7 @@ export default function TasksPage() {
 
     const csvRows = [
       headers.join(','),
-      ...filteredTasks.map(t => {
+      ...unfilteredTasks.map(t => {
         const title = `"${(t.title || '').replace(/"/g, '""')}"`;
         const desc = `"${(t.description || '').replace(/"/g, '""')}"`;
         const projOwner = `"${(t.project_owner || '').replace(/"/g, '""')}"`;

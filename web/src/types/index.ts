@@ -16,6 +16,8 @@ export interface Task {
   latest_update?: string | null;
   project_owner?: string | null;
   previous_progress?: number;
+  is_archived?: boolean;
+  archive_reason?: string | null;
 }
 
 export interface TaskComment {

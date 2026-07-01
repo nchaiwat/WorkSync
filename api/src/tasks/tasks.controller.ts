@@ -61,6 +61,8 @@ export class TasksController {
       latest_update: t.latestUpdate,
       project_owner: t.projectOwner,
       previous_progress: t.previousProgress,
+      is_archived: t.isArchived,
+      archive_reason: t.archiveReason,
     }));
   }
 
@@ -68,8 +70,12 @@ export class TasksController {
   async findAll(@Query() query: any) {
     const status = query?.filter?.status?._eq || query['filter[status][_eq]'];
     const assignee = query?.filter?.assignee?._eq || query['filter[assignee][_eq]'];
+    
+    // Parse is_archived filter
+    const isArchivedQuery = query?.filter?.is_archived?._eq || query['filter[is_archived][_eq]'];
+    const isArchived = isArchivedQuery === 'true' || isArchivedQuery === true;
 
-    const tasks = await this.tasksService.findAll({ status, assignee });
+    const tasks = await this.tasksService.findAll({ status, assignee, isArchived });
     const formatted = await this.formatTasks(tasks);
 
     return {
@@ -110,6 +116,14 @@ export class TasksController {
       throw new ForbiddenException('ไม่มีสิทธิ์แก้ไขงานที่คุณไม่ได้เป็นคนสร้าง (ทำได้เพียงคอมเมนต์)');
     }
 
+    // Map snake_case to camelCase
+    if (body.is_archived !== undefined) {
+      body.isArchived = body.is_archived === 'true' || body.is_archived === true;
+    }
+    if (body.archive_reason !== undefined) {
+      body.archiveReason = body.archive_reason;
+    }
+
     const updated = await this.tasksService.update(id, body);
     const formatted = await this.formatTasks([updated]);
     return { data: formatted[0] };
@@ -117,13 +131,19 @@ export class TasksController {
 
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
-  async remove(@Param('id') id: string, @Req() req: express.Request) {
+  async remove(@Param('id') id: string, @Body() body: any, @Req() req: express.Request) {
     const t = await this.tasksService.findOne(id);
     const user = req.user as any;
 
     if (user.role !== Role.ADMIN && t.createdBy !== user.id) {
       throw new ForbiddenException('ไม่มีสิทธิ์ลบงานที่คุณไม่ได้เป็นคนสร้าง');
     }
+
+    const reason = body?.reason || 'ไม่ระบุเหตุผล';
+    const deleterName = user.nickname || user.firstName || user.username;
+
+    // Notify Telegram before deleting the record
+    await this.tasksService.notifyTaskDeleted(t, deleterName, reason);
 
     await this.tasksService.remove(id);
     return { data: { success: true } };

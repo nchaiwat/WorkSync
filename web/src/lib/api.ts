@@ -49,6 +49,7 @@ async function fetchJSON<T>(url: string, options: RequestInit = {}): Promise<T> 
 export async function getTasks(filters?: {
   status?: string;
   assignee?: string;
+  is_archived?: boolean;
   limit?: number;
   offset?: number;
   filter?: Record<string, any>;
@@ -60,6 +61,9 @@ export async function getTasks(filters?: {
   }
   if (filters?.assignee) {
     params.append('filter[assignee][_eq]', filters.assignee);
+  }
+  if (filters?.is_archived !== undefined) {
+    params.append('filter[is_archived][_eq]', String(filters.is_archived));
   }
   if (filters?.filter) {
     // Merge complex filter object into params
@@ -133,9 +137,21 @@ export async function updateTaskProgress(id: string, progress: number): Promise<
   return updateTask(id, { progress });
 }
 
-export async function deleteTask(id: string): Promise<void> {
+export async function deleteTask(id: string, reason: string): Promise<void> {
   const url = `${API_BASE}/items/tasks/${id}`;
-  await fetchJSON(url, { method: 'DELETE' });
+  await fetchJSON(url, {
+    method: 'DELETE',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function archiveTask(id: string, reason: string): Promise<Task> {
+  const url = `${API_BASE}/items/tasks/${id}`;
+  const result = await fetchJSON<{ data: Task }>(url, {
+    method: 'PATCH',
+    body: JSON.stringify({ is_archived: true, archive_reason: reason }),
+  });
+  return result.data;
 }
 
 // ─── Comments ───────────────────────────────────────────────────────
@@ -292,6 +308,22 @@ export async function uploadTaskFile(taskId: string, file: File): Promise<{ url:
   return result.data;
 }
 
+export async function sendAnnouncement(message: string, targetUserIds: string[]): Promise<void> {
+  const url = `${API_BASE}/users/announce`;
+  await fetchJSON(url, {
+    method: 'POST',
+    body: JSON.stringify({ message, targetUserIds }),
+  });
+}
+
+export async function testTelegram(telegramId: string, message: string): Promise<void> {
+  const url = `${API_BASE}/admin/telegram/test`;
+  await fetchJSON(url, {
+    method: 'POST',
+    body: JSON.stringify({ telegramId, message }),
+  });
+}
+
 // ─── Export API object ──────────────────────────────────────────────
 
 export const api = {
@@ -301,6 +333,7 @@ export const api = {
   updateTask,
   updateTaskProgress,
   deleteTask,
+  archiveTask,
   getComments,
   createComment,
   deleteComment,
@@ -313,4 +346,6 @@ export const api = {
   updateUser,
   uploadAvatar,
   uploadTaskFile,
+  sendAnnouncement,
+  testTelegram,
 };

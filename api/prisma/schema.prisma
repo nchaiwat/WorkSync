@@ -56,6 +56,9 @@ model Task {
   assignee      String
   manager       String?
 
+  isArchived       Boolean  @default(false) @map("is_archived")
+  archiveReason    String?  @map("archive_reason") @db.Text
+
   comments      Comment[]
 
   @@map("tasks")

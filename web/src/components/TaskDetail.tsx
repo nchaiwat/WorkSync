@@ -14,7 +14,8 @@ interface TaskDetailProps {
   canEdit?: boolean;
   isCreator?: boolean;
   currentUserName: string;
-  onDelete?: (taskId: string) => void;
+  onDelete?: (taskId: string, reason: string) => void;
+  onArchive?: (taskId: string, reason: string) => void;
   users?: User[];
 }
 
@@ -78,7 +79,7 @@ function parseTaskUpdates(latestUpdateText: string | null | undefined): ParsedUp
     });
 }
 
-export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator = false, currentUserName, onDelete, users = [] }: TaskDetailProps) {
+export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator = false, currentUserName, onDelete, onArchive, users = [] }: TaskDetailProps) {
   const statusConfig = STATUS_CONFIG[task.status];
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
@@ -92,6 +93,14 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // Modal / Preview States
+  const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
+  const [reasonModal, setReasonModal] = useState<{ isOpen: boolean; actionType: 'delete' | 'archive'; reason: string }>({
+    isOpen: false,
+    actionType: 'archive',
+    reason: '',
+  });
 
   // Comments & Replies States
   const [comments, setComments] = useState<TaskComment[]>([]);
@@ -418,19 +427,29 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
               </button>
             )}
             
-            {(canEdit || isCreator) && onDelete && (
-              <button
-                onClick={() => {
-                  if (confirm('คุณแน่ใจหรือไม่ที่จะลบงานนี้?')) {
-                    onDelete(task.id);
-                  }
-                }}
-                className="p-2 rounded-lg text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                title="ลบงานนี้"
-              >
-                🗑️
-              </button>
-            )}
+             {task.status === 'done' && (canEdit || isCreator) && onArchive && (
+               <button
+                 onClick={() => {
+                   setReasonModal({ isOpen: true, actionType: 'archive', reason: '' });
+                 }}
+                 className="p-2 rounded-lg text-amber-500 hover:text-amber-700 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+                 title="เก็บถาวรงานนี้ (Archive)"
+               >
+                 📦
+               </button>
+             )}
+             
+             {(canEdit || isCreator) && onDelete && (
+               <button
+                 onClick={() => {
+                   setReasonModal({ isOpen: true, actionType: 'delete', reason: '' });
+                 }}
+                 className="p-2 rounded-lg text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                 title="ลบงานนี้"
+               >
+                 🗑️
+               </button>
+             )}
           </div>
         </div>
 
@@ -822,20 +841,32 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                     <span>🕒 {update.timestamp}</span>
                   </div>
                   <div className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap leading-relaxed">{update.content}</div>
-                  {update.attachment && (
-                    <div className="mt-2 pt-1">
-                      <a
-                        href={update.attachment.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/60 dark:hover:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors shadow-sm max-w-full"
-                      >
-                        <span>📎 ไฟล์แนบ:</span>
-                        <span className="truncate max-w-[250px]">{update.attachment.name}</span>
-                        <span className="text-[10px] text-gray-400 font-normal">📥 คลิกดาวน์โหลด</span>
-                      </a>
-                    </div>
-                  )}
+                   {update.attachment && (() => {
+                     const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(update.attachment.name || '');
+                     return (
+                       <div className="mt-2 pt-1 flex flex-wrap gap-2">
+                         <a
+                           href={update.attachment.url}
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           className="inline-flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/60 dark:hover:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors shadow-sm max-w-full"
+                         >
+                           <span>📎 ไฟล์แนบ:</span>
+                           <span className="truncate max-w-[200px]">{update.attachment.name}</span>
+                           <span className="text-[10px] text-gray-400 font-normal">📥 ดาวน์โหลด</span>
+                         </a>
+                         {isImage && (
+                           <button
+                             type="button"
+                             onClick={() => setPreviewImage({ url: update.attachment.url, name: update.attachment.name })}
+                             className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-950/80 rounded-xl border border-blue-200 dark:border-blue-800 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors shadow-sm"
+                           >
+                             <span>👁️ ดูรูปภาพ</span>
+                           </button>
+                         )}
+                       </div>
+                     );
+                   })()}
 
                   <div className="pt-2 border-t border-gray-100 dark:border-slate-700 space-y-2">
                     <div className="text-xs font-bold text-gray-500 dark:text-gray-400">ความคิดเห็นต่ออัปเดตนี้ ({commentsForUpdate.length})</div>
@@ -917,6 +948,84 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
         )}
       </div>
 
+      {/* Modal ป้อนเหตุผลก่อน ลบ หรือ เก็บถาวร (Delete/Archive Reason Modal) */}
+      {reasonModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border-2 border-slate-200 dark:border-slate-700 shadow-2xl p-6 w-full max-w-md space-y-4 animate-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              {reasonModal.actionType === 'archive' ? '📦 ยืนยันการเก็บถาวรงาน' : '🗑️ ยืนยันการลบงาน'}
+            </h3>
+            <p className="text-xs text-gray-505 dark:text-gray-400">
+              {reasonModal.actionType === 'archive' 
+                ? 'กรุณากรอกเหตุผลเพื่อบันทึกและส่งแจ้งเตือน Telegram ไปยังทีมงานที่เกี่ยวข้อง' 
+                : 'การลบจะนำงานนี้ออกจากระบบอย่างถาวร กรุณากรอกเหตุผลและส่งสัญญาณแจ้งทีมงาน'}
+            </p>
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                เหตุผลประกอบรายการ <span className="text-red-505">*</span>
+              </label>
+              <textarea
+                value={reasonModal.reason}
+                onChange={(e) => setReasonModal(prev => ({ ...prev, reason: e.target.value }))}
+                placeholder={reasonModal.actionType === 'archive' ? 'เช่น งานสำเร็จลุล่วง/ปิดโครงการแล้ว' : 'เช่น ป้อนข้อมูลผิด/ยกเลิกแผนงาน'}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-650 rounded-xl bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none h-24 resize-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setReasonModal(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                disabled={!reasonModal.reason.trim()}
+                onClick={() => {
+                  setReasonModal(prev => ({ ...prev, isOpen: false }));
+                  if (reasonModal.actionType === 'archive' && onArchive) {
+                    onArchive(task.id, reasonModal.reason.trim());
+                  } else if (reasonModal.actionType === 'delete' && onDelete) {
+                    onDelete(task.id, reasonModal.reason.trim());
+                  }
+                }}
+                className={`px-4 py-2 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 ${
+                  reasonModal.actionType === 'archive' 
+                    ? 'bg-amber-600 hover:bg-amber-700' 
+                    : 'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                ยืนยันทำรายการ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox Modal ดูรูปภาพขนาดเต็มหน้าจอ (Image Modal Viewer) */}
+      {previewImage && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="absolute top-4 left-4 flex gap-4">
+            <button
+              onClick={() => setPreviewImage(null)}
+              className="px-4 py-2 bg-slate-800/80 hover:bg-slate-700 text-white rounded-xl text-sm font-semibold transition-colors flex items-center gap-1.5 shadow-md border border-slate-700 active:scale-95"
+            >
+              ← กลับ
+            </button>
+          </div>
+          <div className="max-w-4xl max-h-[80vh] flex items-center justify-center mt-12 animate-in zoom-in-95 duration-200">
+            <img
+              src={previewImage.url}
+              alt={previewImage.name}
+              className="max-w-full max-h-[75vh] object-contain rounded-lg shadow-2xl border border-slate-800"
+            />
+          </div>
+          <p className="mt-4 text-xs font-semibold text-slate-400 select-none text-center">
+            {previewImage.name}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

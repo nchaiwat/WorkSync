@@ -91,12 +91,23 @@ export default function TaskDetailPage() {
     setTask(updated);
   };
 
-  const handleDelete = async (taskId: string) => {
+  const handleDelete = async (taskId: string, reason: string) => {
     try {
-      await api.deleteTask(taskId);
+      await api.deleteTask(taskId, reason);
       router.push('/tasks');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'ลบงานไม่สำเร็จ';
+      alert(msg);
+    }
+  };
+
+  const handleArchive = async (taskId: string, reason: string) => {
+    try {
+      await api.archiveTask(taskId, reason);
+      alert('เก็บถาวรงานเรียบร้อยแล้ว');
+      router.push('/tasks');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'เก็บถาวรงานไม่สำเร็จ';
       alert(msg);
     }
   };
@@ -146,7 +157,7 @@ export default function TaskDetailPage() {
 
       <main className="max-w-4xl mx-auto px-4 py-6">
 
-        <TaskDetail task={task} onUpdate={handleUpdate} canEdit={canEdit} isCreator={currentUser?.id === task.creator_id} currentUserName={currentUser?.formattedName || 'Anonymous'} onDelete={handleDelete} users={users} />
+        <TaskDetail task={task} onUpdate={handleUpdate} canEdit={canEdit} isCreator={currentUser?.id === task.creator_id} currentUserName={currentUser?.formattedName || 'Anonymous'} onDelete={handleDelete} onArchive={handleArchive} users={users} />
       </main>
     </div>
   );

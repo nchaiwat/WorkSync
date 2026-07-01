@@ -11,10 +11,12 @@ import {
   UseGuards,
   UnauthorizedException,
   ForbiddenException,
+  BadRequestException,
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { TelegramService } from '../telegram/telegram.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import * as express from 'express';
 import { Role } from '@prisma/client';
@@ -25,7 +27,10 @@ import * as fs from 'fs';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly telegramService: TelegramService,
+  ) {}
 
   @Get()
   async findAll(@Query() query: any, @Req() req: express.Request) {
@@ -225,5 +230,37 @@ export class UsersController {
     const avatarUrl = `/uploads/${file.filename}`;
     await this.usersService.update(id, { avatarUrl });
     return { data: { avatar_url: avatarUrl } };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('announce')
+  async announce(@Body() body: any, @Req() req: express.Request) {
+    const currentUser = req.user as any;
+    if (currentUser.role !== Role.ADMIN) {
+      throw new ForbiddenException('เฉพาะผู้ดูแลระบบเท่านั้นที่สามารถประกาศได้');
+    }
+
+    const { message, targetUserIds } = body;
+    if (!message || !message.trim()) {
+      throw new BadRequestException('กรุณาระบุข้อความประกาศ');
+    }
+    if (!targetUserIds || !Array.isArray(targetUserIds) || targetUserIds.length === 0) {
+      throw new BadRequestException('กรุณาระบุผู้รับประกาศ');
+    }
+
+    // Fetch target users to get their Telegram IDs
+    const allUsers = await this.usersService.findAll();
+    const receivers = allUsers.filter((u) => targetUserIds.includes(u.id));
+    const telegramIds = receivers
+      .map((u) => u.telegramId)
+      .filter((id): id is string => !!id && id.trim() !== '');
+
+    if (telegramIds.length > 0) {
+      const announceHeader = `📢 <b>ประกาศสำคัญ (WorkSync)</b>\n${'─'.repeat(28)}\n`;
+      const formattedMessage = announceHeader + message.trim();
+      await this.telegramService.broadcastNotification(telegramIds, formattedMessage);
+    }
+
+    return { data: { success: true, sentCount: telegramIds.length } };
   }
 }

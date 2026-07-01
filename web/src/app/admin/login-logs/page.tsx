@@ -123,10 +123,10 @@ export default function AdminLoginLogsPage() {
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex gap-6 mt-4 border-t border-gray-100 dark:border-slate-700 pt-3">
+          <div className="flex gap-6 mt-4 border-t border-gray-100 dark:border-slate-700 pt-3 overflow-x-auto scrollbar-none">
             <Link
               href="/admin/users"
-              className="text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              className="text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 pb-2 border-b-2 border-transparent"
             >
               👥 ผู้ใช้งานในระบบ
             </Link>
@@ -135,6 +135,18 @@ export default function AdminLoginLogsPage() {
               className="text-sm font-semibold text-blue-600 dark:text-blue-400 border-b-2 border-blue-500 pb-2"
             >
               📋 ประวัติการเข้าใช้งาน
+            </Link>
+            <Link
+              href="/admin/announce"
+              className="text-sm font-medium text-gray-500 hover:text-gray-705 dark:text-gray-400 dark:hover:text-gray-200 pb-2 border-b-2 border-transparent"
+            >
+              📢 ประกาศระบบ
+            </Link>
+            <Link
+              href="/admin/telegram"
+              className="text-sm font-medium text-gray-500 hover:text-gray-755 dark:text-gray-400 dark:hover:text-gray-200 pb-2 border-b-2 border-transparent"
+            >
+              ✈️ จัดการ Telegram
             </Link>
           </div>
         </div>
