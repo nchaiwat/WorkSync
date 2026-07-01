@@ -214,12 +214,6 @@ export default function TasksPage() {
               {creatorFilter ? `📋 งานของ ${creatorFilter.match(/^([^\s(]+)/)?.[1] || creatorFilter}` : '📋 งานทั้งหมด'}
             </h1>
             <div className="flex items-center gap-2">
-              <button
-                onClick={handleExportExcel}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800 text-white rounded-lg text-xs sm:text-sm font-semibold transition-colors shadow-sm flex items-center gap-1.5"
-              >
-                <span>📥</span> Export Excel
-              </button>
               <Link
                 href="/tasks/new"
                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs sm:text-sm font-semibold transition-colors shadow-sm"

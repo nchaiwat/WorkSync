@@ -33,6 +33,7 @@ export default function Home() {
   // UI States
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [unfilteredTasks, setUnfilteredTasks] = useState<Task[]>([]);
   
   // PIN Setup States
   const [setupPin, setSetupPin] = useState('');
@@ -196,15 +197,17 @@ export default function Home() {
         return false;
       };
 
-      // SECURITY: Users should only ever see tasks they created OR are related to.
-      const allRelatedTasks = result.data.filter(
-        (t) =>
-          !t.is_archived &&
-          (t.creator_id === currentUser?.id ||
-          isUserMatch(t.assignee) ||
-          isUserMatch(t.manager) ||
-          (t.collaborators && t.collaborators.some(col => isUserMatch(col))))
-      );
+       // SECURITY: Users should only ever see tasks they created OR are related to.
+       const allRelatedTasks = result.data.filter(
+         (t) =>
+           !t.is_archived &&
+           (t.creator_id === currentUser?.id ||
+           isUserMatch(t.assignee) ||
+           isUserMatch(t.manager) ||
+           (t.collaborators && t.collaborators.some(col => isUserMatch(col))))
+       );
+ 
+       setUnfilteredTasks(allRelatedTasks);
 
       // Auto-archive Done tasks (hide if status is 'done' and updated_at/created_at is older than 7 days)
       const activeTasks = allRelatedTasks.filter((t) => {
@@ -236,6 +239,81 @@ export default function Home() {
       setIsLoading(false);
     }
   }, [isLoggedIn, currentUser, filter]);
+
+  const handleExportExcel = () => {
+    const headers = [
+      'หัวข้อภารกิจ',
+      'รายละเอียด',
+      'เจ้าของโครงการ',
+      'สถานะ',
+      'ความคืบหน้า',
+      'ผู้รับผิดชอบ',
+      'ผู้จัดการ',
+      'ผู้ร่วมงาน',
+      'กำหนดส่ง',
+      'ผู้สร้างงาน',
+      'วันที่สร้างงาน',
+      'อัปเดตล่าสุด',
+      'อัปเดตความคืบหน้าล่าสุด'
+    ];
+
+    const statusMap: Record<string, string> = {
+      todo: 'To Do',
+      in_progress: 'Doing',
+      review: 'Review',
+      done: 'Done'
+    };
+
+    const csvRows = [
+      headers.join(','),
+      ...unfilteredTasks.map(t => {
+        const title = `"${(t.title || '').replace(/"/g, '""')}"`;
+        const desc = `"${(t.description || '').replace(/"/g, '""')}"`;
+        const projOwner = `"${(t.project_owner || '').replace(/"/g, '""')}"`;
+        const status = `"${statusMap[t.status] || t.status}"`;
+        const progress = `"${t.progress || 0}%"`;
+        const assignee = `"${(t.assignee || '').replace(/"/g, '""')}"`;
+        const manager = `"${(t.manager || '').replace(/"/g, '""')}"`;
+        const collaborators = `"${(t.collaborators || []).join(', ').replace(/"/g, '""')}"`;
+        const deadline = `"${t.deadline ? new Date(t.deadline).toLocaleDateString('th-TH') : '—'}"`;
+        const createdBy = `"${(t.created_by_name || '').replace(/"/g, '""')}"`;
+        const createdAt = `"${t.created_at ? new Date(t.created_at).toLocaleString('th-TH') : '—'}"`;
+        const updatedAt = `"${t.updated_at ? new Date(t.updated_at).toLocaleString('th-TH') : '—'}"`;
+        
+        let latestUpdate = t.latest_update || '';
+        const sections = latestUpdate.split(/---\r?\n|---/g).map(s => s.trim()).filter(Boolean);
+        const firstSec = sections[0] || '';
+        const cleanUpdate = firstSec.replace(/\[attachment:([^|\]]+)\|name:([^\]]+)\]/g, '').trim();
+        const latestUpdateEscaped = `"${cleanUpdate.replace(/"/g, '""')}"`;
+
+        return [
+          title,
+          desc,
+          projOwner,
+          status,
+          progress,
+          assignee,
+          manager,
+          collaborators,
+          deadline,
+          createdBy,
+          createdAt,
+          updatedAt,
+          latestUpdateEscaped
+        ].join(',');
+      })
+    ];
+
+    const csvContent = '\uFEFF' + csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `tasks_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const getUserTelegramId = (nameOrId: string) => {
     if (!nameOrId || !users) return undefined;
@@ -375,6 +453,13 @@ export default function Home() {
               {/* Mobile Actions */}
               {isLoggedIn && (
                 <div className="flex items-center gap-3 sm:hidden">
+                  <button
+                    onClick={handleExportExcel}
+                    className="w-8 h-8 bg-emerald-50 hover:bg-emerald-105 border border-emerald-300 dark:bg-emerald-950/40 dark:hover:bg-emerald-950/80 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 rounded-lg text-sm font-extrabold transition-all active:scale-95 shadow-sm flex items-center justify-center"
+                    title="Export Excel"
+                  >
+                    E
+                  </button>
                   <Link
                     href="/tasks/new"
                     className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
@@ -482,6 +567,13 @@ export default function Home() {
               {/* Desktop-only elements */}
               {isLoggedIn ? (
                 <div className="hidden sm:flex items-center gap-3 ml-2">
+                  <button
+                    onClick={handleExportExcel}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors whitespace-nowrap shadow-sm flex items-center gap-1.5"
+                    title="Export Excel"
+                  >
+                    📥 Export Excel
+                  </button>
                   <Link
                     href="/tasks/new"
                     className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors whitespace-nowrap shadow-sm"
