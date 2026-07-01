@@ -24,7 +24,20 @@ export class TelegramController {
       throw new BadRequestException('กรุณาระบุข้อความสำหรับทดสอบ');
     }
 
-    const testMessage = `🤖 <b>ระบบทดสอบการส่ง Telegram (WorkSync)</b>\n────────────────────────────\n📝 ${message.trim()}`;
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('th-TH', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'Asia/Bangkok',
+    });
+    const timeStr = now.toLocaleTimeString('th-TH', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Bangkok',
+    });
+    const header = `🔄 <b>WorkSync</b>  ·  ${dateStr} ${timeStr} น.\n${'─'.repeat(28)}\n`;
+    const testMessage = `${header}🤖 <b>ระบบทดสอบการส่ง Telegram (WorkSync)</b>\n\n📝 ${message.trim()}`;
     await this.telegramService.sendDirectMessage(telegramId.trim(), testMessage);
 
     return { data: { success: true } };
