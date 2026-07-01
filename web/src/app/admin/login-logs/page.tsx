@@ -142,12 +142,6 @@ export default function AdminLoginLogsPage() {
             >
               📢 ประกาศระบบ
             </Link>
-            <Link
-              href="/admin/telegram"
-              className="text-sm font-medium text-gray-500 hover:text-gray-755 dark:text-gray-400 dark:hover:text-gray-200 pb-2 border-b-2 border-transparent"
-            >
-              ✈️ จัดการ Telegram
-            </Link>
           </div>
         </div>
       </header>

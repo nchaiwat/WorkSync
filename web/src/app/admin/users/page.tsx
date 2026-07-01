@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getMe, getAuthToken, logout as authLogout, admin } from '@/lib/auth';
 import type { User } from '@/types';
+import { api } from '@/lib/api';
 
 export default function AdminUsersPage() {
   const router = useRouter();
@@ -67,6 +68,23 @@ export default function AdminUsersPage() {
       setUsers([]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleQuickTelegramTest = async (user: User) => {
+    if (!user.telegram_id) return;
+    
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const userDisplayName = `${user.nickname ? `${user.nickname} ` : ''}(${user.first_name})`;
+    const testMsg = `สวัสดีคุณ ${userDisplayName} นี่คือข้อความทดสอบความพร้อมระบบแจ้งเตือน Telegram ของคุณครับ!\n\n📅 วันที่ทดสอบ: ${dateStr}\n⏰ เวลาทดสอบ: ${timeStr} น.`;
+
+    try {
+      await api.testTelegram(user.telegram_id, testMsg);
+      alert(`ส่งข้อความทดสอบ Telegram หาคุณ ${user.first_name} สำเร็จ!`);
+    } catch (err: any) {
+      alert(`ส่งข้อความทดสอบล้มเหลว: ${err.message || 'กรุณาตรวจสอบว่าบอทเริ่มการทำงานแล้ว'}`);
     }
   };
 
@@ -214,12 +232,6 @@ export default function AdminUsersPage() {
             >
               📢 ประกาศระบบ
             </Link>
-            <Link
-              href="/admin/telegram"
-              className="text-sm font-medium text-gray-500 hover:text-gray-755 dark:text-gray-400 dark:hover:text-gray-200 pb-2 border-b-2 border-transparent"
-            >
-              ✈️ จัดการ Telegram
-            </Link>
           </div>
         </div>
       </header>
@@ -282,8 +294,23 @@ export default function AdminUsersPage() {
                               @{user.username} {user.email && `· ${user.email}`}
                             </div>
                             {user.telegram_id && (
-                              <div className="text-xs text-sky-500 dark:text-sky-400 mt-0.5">
-                                Telegram: {user.telegram_id}
+                              <div className="text-xs text-sky-505 dark:text-sky-400 mt-1 flex items-center gap-1.5">
+                                <span className="flex items-center gap-1">
+                                  💬 {user.telegram_id}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleQuickTelegramTest(user);
+                                  }}
+                                  className="inline-flex items-center justify-center w-5 h-5 bg-sky-100 hover:bg-sky-200 dark:bg-sky-950 dark:hover:bg-sky-900 border border-sky-300 dark:border-sky-800 text-sky-650 dark:text-sky-400 rounded-full transition-all active:scale-95 shadow-sm cursor-pointer select-none"
+                                  title="ทดสอบส่งสัญญาณ Telegram"
+                                >
+                                  <svg className="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.11.02-1.89 1.2-5.33 3.52-.5.35-.96.52-1.37.51-.45-.01-1.31-.25-1.95-.46-.78-.25-1.4-.39-1.35-.83.03-.23.35-.46.96-.69 3.77-1.64 6.29-2.72 7.56-3.25 3.6-.15 4.35 1.13 4.43 1.9z"/>
+                                  </svg>
+                                </button>
                               </div>
                             )}
                           </div>
