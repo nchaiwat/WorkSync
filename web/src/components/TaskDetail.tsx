@@ -965,12 +965,12 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                      );
                    })()}
 
-                   {idx === 0 && task.likes && task.likes.length > 0 && (
+                   {getUpdateLikes(update.key).length > 0 && (
                      <div className="flex items-center gap-1.5 pt-2 border-t border-dashed border-slate-200 dark:border-slate-700 text-[11px] text-slate-500 dark:text-slate-400">
                        <span className="text-blue-500">👍</span>
                        <span className="font-semibold text-slate-655 dark:text-slate-355">อ่านแล้ว:</span>
                        <span className="font-medium text-slate-700 dark:text-slate-300">
-                         {task.likes.map(like => {
+                         {getUpdateLikes(update.key).map(like => {
                            const name = getUserDisplayName(like.formatted_name || like.nickname || like.first_name || like.username);
                            return name.split('/')[0];
                          }).join(', ')}
