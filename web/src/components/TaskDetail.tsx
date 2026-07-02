@@ -834,53 +834,7 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
         )}
       </div>
 
-      {/* Acknowledge (Like) Section */}
-      <div className="p-4 sm:p-6 border-b-2 border-slate-200 dark:border-slate-700/80 bg-slate-50/20 dark:bg-slate-900/5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            {isCurrentUserInvolved && (
-              <button
-                onClick={handleToggleLike}
-                disabled={isTogglingLike}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all shadow-sm active:scale-95 ${
-                  hasLiked
-                    ? 'bg-blue-50 dark:bg-blue-950/25 border-blue-400 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-950/40'
-                    : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
-                }`}
-              >
-                <span className="text-base">{hasLiked ? '👍' : '👍'}</span>
-                <span>{hasLiked ? 'อ่านแล้ว (ไลค์แล้ว)' : 'กดไลค์ (อ่านแล้ว)'}</span>
-              </button>
-            )}
-            {!isCurrentUserInvolved && (
-              <div className="text-xs text-slate-400 dark:text-slate-500 italic">
-                เฉพาะบุคคลที่เกี่ยวข้องกับงานนี้เท่านั้นที่กดไลค์เพื่อยืนยันการอ่านได้
-              </div>
-            )}
-          </div>
 
-          <div className="flex-1 flex flex-col sm:items-end">
-            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
-              รายชื่อผู้ที่อ่านแล้ว ({task.likes?.length || 0})
-            </span>
-            <div className="flex flex-wrap gap-2 sm:justify-end">
-              {task.likes && task.likes.length > 0 ? (
-                task.likes.map((like) => (
-                  <span
-                    key={like.user_id}
-                    className="px-2.5 py-1 bg-blue-50/50 dark:bg-blue-950/10 rounded-lg text-xs font-medium text-slate-750 dark:text-slate-350 border border-blue-100/50 dark:border-blue-950/30 flex items-center gap-1 shadow-sm"
-                  >
-                    <span className="text-blue-500 text-xs">👍</span>
-                    <UserDisplay name={getUserDisplayName(like.formatted_name || like.nickname || like.first_name || like.username)} size="sm" telegramId={getUserTelegramId(like.username)} />
-                  </span>
-                ))
-              ) : (
-                <span className="text-xs text-slate-400 dark:text-slate-500 italic">ยังไม่มีใครกดไลค์ (อ่านแล้ว)</span>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Task Update Section — always visible */}
       <div className="p-4 sm:p-6 border-b-2 border-blue-300 dark:border-blue-800 bg-blue-50/80 dark:bg-blue-950/20 border-l-4 border-l-blue-600 dark:border-l-blue-500">
@@ -951,7 +905,23 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
               return (
                 <div key={idx} className="bg-white dark:bg-slate-800 p-4 rounded-xl border-2 border-slate-300 dark:border-slate-700 border-l-4 border-l-blue-600 dark:border-l-blue-400 shadow-md space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs font-semibold text-blue-700 dark:text-blue-300">
-                    <span>👤 เจ้าของงาน</span>
+                    <div className="flex items-center gap-2">
+                      <span>👤 เจ้าของงาน</span>
+                      {isCurrentUserInvolved && idx === 0 && (
+                        <button
+                          onClick={handleToggleLike}
+                          disabled={isTogglingLike}
+                          className={`inline-flex items-center justify-center w-6 h-6 rounded-full border transition-all active:scale-95 ${
+                            hasLiked
+                              ? 'bg-blue-100 dark:bg-blue-900 border-blue-400 text-blue-600 dark:text-blue-400 shadow-sm'
+                              : 'bg-white dark:bg-slate-700 border-slate-300 text-slate-450 dark:text-slate-500 hover:bg-slate-100'
+                          }`}
+                          title="กดไลค์ (อ่านแล้ว)"
+                        >
+                          👍
+                        </button>
+                      )}
+                    </div>
                     <span>🕒 {update.timestamp}</span>
                   </div>
                   <div className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap leading-relaxed">{update.content}</div>
@@ -967,7 +937,6 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                          >
                            <span>📎 ไฟล์แนบ:</span>
                            <span className="truncate max-w-[200px]">{update.attachment.name}</span>
-                           <span className="text-[10px] text-gray-400 font-normal">📥 ดาวน์โหลด</span>
                          </a>
                          {isImage && (
                            <button
@@ -982,8 +951,37 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                      );
                    })()}
 
+                   {idx === 0 && task.likes && task.likes.length > 0 && (
+                     <div className="flex items-center gap-1.5 pt-2 border-t border-dashed border-slate-200 dark:border-slate-700 text-[11px] text-slate-500 dark:text-slate-400">
+                       <span className="text-blue-500">👍</span>
+                       <span className="font-semibold text-slate-655 dark:text-slate-355">อ่านแล้ว:</span>
+                       <span className="font-medium text-slate-700 dark:text-slate-300">
+                         {task.likes.map(like => {
+                           const name = getUserDisplayName(like.formatted_name || like.nickname || like.first_name || like.username);
+                           return name.split('/')[0];
+                         }).join(', ')}
+                       </span>
+                     </div>
+                   )}
+
                   <div className="pt-2 border-t border-gray-100 dark:border-slate-700 space-y-2">
-                    <div className="text-xs font-bold text-gray-500 dark:text-gray-400">ความคิดเห็นต่ออัปเดตนี้ ({commentsForUpdate.length})</div>
+                    <div className="flex items-center justify-between text-xs font-bold text-gray-500 dark:text-gray-400">
+                      <span>ความคิดเห็นต่ออัปเดตนี้ ({commentsForUpdate.length})</span>
+                      {isCurrentUserInvolved && (
+                        <button
+                          onClick={handleToggleLike}
+                          disabled={isTogglingLike}
+                          className={`inline-flex items-center justify-center w-6 h-6 rounded-full border transition-all active:scale-95 ${
+                            hasLiked
+                              ? 'bg-blue-100 dark:bg-blue-900 border-blue-400 text-blue-600 dark:text-blue-400 shadow-sm'
+                              : 'bg-white dark:bg-slate-700 border-slate-300 text-slate-450 dark:text-slate-500 hover:bg-slate-100'
+                          }`}
+                          title="กดไลค์ (อ่านแล้ว)"
+                        >
+                          👍
+                        </button>
+                      )}
+                    </div>
                     {commentsForUpdate.map(c => (
                       <div key={c.id} className="text-xs bg-gray-50 dark:bg-slate-700/50 p-2.5 rounded-lg border border-gray-100 dark:border-slate-700">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 font-semibold text-gray-700 dark:text-gray-300 mb-1">
@@ -1027,6 +1025,38 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                 ? 'ยังไม่มีอัปเดตงาน — เพิ่มอัปเดตแรกด้านบน'
                 : 'ยังไม่มีอัปเดตงานจากเจ้าของงานเลย'}
             </p>
+            
+            <div className="flex items-center justify-between text-xs font-bold text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-slate-700 pb-1">
+              <span>ความคิดเห็น ({comments.filter(c => !c.update_key).length})</span>
+              {isCurrentUserInvolved && (
+                <button
+                  onClick={handleToggleLike}
+                  disabled={isTogglingLike}
+                  className={`inline-flex items-center justify-center w-6 h-6 rounded-full border transition-all active:scale-95 ${
+                    hasLiked
+                      ? 'bg-blue-100 dark:bg-blue-900 border-blue-400 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'bg-white dark:bg-slate-750 border-slate-300 text-slate-450 dark:text-slate-500 hover:bg-slate-100'
+                  }`}
+                  title="กดไลค์ (อ่านแล้ว)"
+                >
+                  👍
+                </button>
+              )}
+            </div>
+
+            {task.likes && task.likes.length > 0 && (
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                <span className="text-blue-500">👍</span>
+                <span className="font-semibold text-slate-650 dark:text-slate-355">อ่านแล้ว:</span>
+                <span className="font-medium text-slate-700 dark:text-slate-300">
+                  {task.likes.map(like => {
+                    const name = getUserDisplayName(like.formatted_name || like.nickname || like.first_name || like.username);
+                    return name.split('/')[0];
+                  }).join(', ')}
+                </span>
+              </div>
+            )}
+
             {/* General comments (will appear under first update once it exists) */}
             {comments.filter(c => !c.update_key).map(c => (
               <div key={c.id} className="text-xs bg-white dark:bg-slate-800 p-2.5 rounded-lg border border-gray-200 dark:border-slate-700">

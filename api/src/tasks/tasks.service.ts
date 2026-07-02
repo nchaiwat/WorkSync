@@ -302,7 +302,15 @@ export class TasksService {
                 const firstSection = sections[0]?.trim() || '';
                 const cleanText = firstSection.replace(/^\[[^\]]+\]/, '').trim();
                 if (cleanText) {
-                  changes.push(`📝 <b>ความคืบหน้าล่าสุด:</b>\n${cleanText}`);
+                  const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000';
+                  const formattedText = cleanText.replace(
+                    /\[attachment:([^|\]]+)\|name:([^\]]+)\]/g,
+                    (match, url, name) => {
+                      const absoluteUrl = url.startsWith('http') ? url : `${backendUrl}${url}`;
+                      return `📎 <a href="${absoluteUrl}">${name}</a>`;
+                    }
+                  );
+                  changes.push(`📝 <b>ความคืบหน้าล่าสุด:</b>\n${formattedText}`);
                 }
               }
 
