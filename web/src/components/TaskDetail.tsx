@@ -905,26 +905,26 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
               return (
                 <div key={idx} className="bg-white dark:bg-slate-800 p-4 rounded-xl border-2 border-slate-300 dark:border-slate-700 border-l-4 border-l-blue-600 dark:border-l-blue-400 shadow-md space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs font-semibold text-blue-700 dark:text-blue-300">
-                    <div className="flex items-center gap-2">
-                      <span>👤 เจ้าของงาน</span>
-                      {isCurrentUserInvolved && idx === 0 && (
-                        <button
-                          onClick={handleToggleLike}
-                          disabled={isTogglingLike}
-                          className={`inline-flex items-center justify-center w-6 h-6 rounded-full border transition-all active:scale-95 ${
-                            hasLiked
-                              ? 'bg-blue-100 dark:bg-blue-900 border-blue-400 text-blue-600 dark:text-blue-400 shadow-sm'
-                              : 'bg-white dark:bg-slate-700 border-slate-300 text-slate-450 dark:text-slate-500 hover:bg-slate-100'
-                          }`}
-                          title="กดไลค์ (อ่านแล้ว)"
-                        >
-                          👍
-                        </button>
-                      )}
-                    </div>
+                    <span>👤 เจ้าของงาน</span>
                     <span>🕒 {update.timestamp}</span>
                   </div>
-                  <div className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap leading-relaxed">{update.content}</div>
+                  <div className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap leading-relaxed flex items-center justify-between gap-2">
+                    <span>{update.content}</span>
+                    {isCurrentUserInvolved && idx === 0 && (
+                      <button
+                        onClick={handleToggleLike}
+                        disabled={isTogglingLike}
+                        className={`inline-flex items-center justify-center w-5 h-5 rounded-full border transition-all active:scale-95 flex-shrink-0 ${
+                          hasLiked
+                            ? 'bg-blue-100 dark:bg-blue-900 border-blue-400 text-blue-600 dark:text-blue-400 shadow-sm'
+                            : 'bg-white dark:bg-slate-700 border-slate-300 text-slate-400 dark:text-slate-500 hover:bg-slate-100'
+                        }`}
+                        title="กดไลค์ (อ่านแล้ว)"
+                      >
+                        👍
+                      </button>
+                    )}
+                  </div>
                    {update.attachment && (() => {
                      const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(update.attachment.name || '');
                      return (
@@ -965,23 +965,7 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                    )}
 
                   <div className="pt-2 border-t border-gray-100 dark:border-slate-700 space-y-2">
-                    <div className="flex items-center justify-between text-xs font-bold text-gray-500 dark:text-gray-400">
-                      <span>ความคิดเห็นต่ออัปเดตนี้ ({commentsForUpdate.length})</span>
-                      {isCurrentUserInvolved && (
-                        <button
-                          onClick={handleToggleLike}
-                          disabled={isTogglingLike}
-                          className={`inline-flex items-center justify-center w-6 h-6 rounded-full border transition-all active:scale-95 ${
-                            hasLiked
-                              ? 'bg-blue-100 dark:bg-blue-900 border-blue-400 text-blue-600 dark:text-blue-400 shadow-sm'
-                              : 'bg-white dark:bg-slate-700 border-slate-300 text-slate-450 dark:text-slate-500 hover:bg-slate-100'
-                          }`}
-                          title="กดไลค์ (อ่านแล้ว)"
-                        >
-                          👍
-                        </button>
-                      )}
-                    </div>
+                    <div className="text-xs font-bold text-gray-500 dark:text-gray-400">ความคิดเห็นต่ออัปเดตนี้ ({commentsForUpdate.length})</div>
                     {commentsForUpdate.map(c => (
                       <div key={c.id} className="text-xs bg-gray-50 dark:bg-slate-700/50 p-2.5 rounded-lg border border-gray-100 dark:border-slate-700">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 font-semibold text-gray-700 dark:text-gray-300 mb-1">
@@ -992,7 +976,23 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                             })}
                           </span>
                         </div>
-                        <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{c.message}</p>
+                        <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap flex items-center justify-between gap-2">
+                          <span>{c.message}</span>
+                          {isCurrentUserInvolved && (
+                            <button
+                              onClick={handleToggleLike}
+                              disabled={isTogglingLike}
+                              className={`inline-flex items-center justify-center w-5 h-5 rounded-full border transition-all active:scale-95 flex-shrink-0 ${
+                                hasLiked
+                                  ? 'bg-blue-100 dark:bg-blue-900 border-blue-400 text-blue-600 dark:text-blue-400 shadow-sm'
+                                  : 'bg-white dark:bg-slate-700 border-slate-300 text-slate-400 dark:text-slate-500 hover:bg-slate-100'
+                              }`}
+                              title="กดไลค์ (อ่านแล้ว)"
+                            >
+                              👍
+                            </button>
+                          )}
+                        </p>
                       </div>
                     ))}
                     <div className="flex gap-2 pt-1">
@@ -1026,28 +1026,14 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                 : 'ยังไม่มีอัปเดตงานจากเจ้าของงานเลย'}
             </p>
             
-            <div className="flex items-center justify-between text-xs font-bold text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-slate-700 pb-1">
-              <span>ความคิดเห็น ({comments.filter(c => !c.update_key).length})</span>
-              {isCurrentUserInvolved && (
-                <button
-                  onClick={handleToggleLike}
-                  disabled={isTogglingLike}
-                  className={`inline-flex items-center justify-center w-6 h-6 rounded-full border transition-all active:scale-95 ${
-                    hasLiked
-                      ? 'bg-blue-100 dark:bg-blue-900 border-blue-400 text-blue-600 dark:text-blue-400 shadow-sm'
-                      : 'bg-white dark:bg-slate-750 border-slate-300 text-slate-450 dark:text-slate-500 hover:bg-slate-100'
-                  }`}
-                  title="กดไลค์ (อ่านแล้ว)"
-                >
-                  👍
-                </button>
-              )}
+            <div className="text-xs font-bold text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-slate-700 pb-1">
+              ความคิดเห็น ({comments.filter(c => !c.update_key).length})
             </div>
 
             {task.likes && task.likes.length > 0 && (
               <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                 <span className="text-blue-500">👍</span>
-                <span className="font-semibold text-slate-650 dark:text-slate-355">อ่านแล้ว:</span>
+                <span className="font-semibold text-slate-655 dark:text-slate-355">อ่านแล้ว:</span>
                 <span className="font-medium text-slate-700 dark:text-slate-300">
                   {task.likes.map(like => {
                     const name = getUserDisplayName(like.formatted_name || like.nickname || like.first_name || like.username);
@@ -1068,7 +1054,23 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                     })}
                   </span>
                 </div>
-                <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{c.message}</p>
+                <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap flex items-center justify-between gap-2">
+                  <span>{c.message}</span>
+                  {isCurrentUserInvolved && (
+                    <button
+                      onClick={handleToggleLike}
+                      disabled={isTogglingLike}
+                      className={`inline-flex items-center justify-center w-5 h-5 rounded-full border transition-all active:scale-95 flex-shrink-0 ${
+                        hasLiked
+                          ? 'bg-blue-100 dark:bg-blue-900 border-blue-400 text-blue-600 dark:text-blue-400 shadow-sm'
+                          : 'bg-white dark:bg-slate-700 border-slate-300 text-slate-400 dark:text-slate-500 hover:bg-slate-100'
+                      }`}
+                      title="กดไลค์ (อ่านแล้ว)"
+                    >
+                      👍
+                    </button>
+                  )}
+                </p>
               </div>
             ))}
             <div className="flex gap-2">

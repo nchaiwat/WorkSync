@@ -89,7 +89,6 @@ export default function TaskDetailPage() {
   }, [task]);
 
   const handleUpdate = async (updated: Task) => {
-    if (!canEdit) return;
     setTask(updated);
   };
 
