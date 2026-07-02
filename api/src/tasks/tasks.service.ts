@@ -349,24 +349,25 @@ export class TasksService {
     }
   }
 
-  async toggleLike(taskId: string, userId: string): Promise<any> {
+  async addLike(taskId: string, userId: string, targetType: string, targetId: string): Promise<any> {
     const existing = await this.prisma.taskLike.findUnique({
       where: {
-        taskId_userId: { taskId, userId }
+        taskId_userId_targetType_targetId: {
+          taskId,
+          userId,
+          targetType,
+          targetId
+        }
       }
     });
 
-    if (existing) {
-      await this.prisma.taskLike.delete({
-        where: {
-          taskId_userId: { taskId, userId }
-        }
-      });
-    } else {
+    if (!existing) {
       await this.prisma.taskLike.create({
         data: {
           taskId,
-          userId
+          userId,
+          targetType,
+          targetId
         }
       });
     }

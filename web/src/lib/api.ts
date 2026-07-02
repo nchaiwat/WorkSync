@@ -324,10 +324,11 @@ export async function testTelegram(telegramId: string, message: string): Promise
   });
 }
 
-export async function toggleTaskLike(id: string): Promise<Task> {
+export async function toggleTaskLike(id: string, targetType: string, targetId: string): Promise<Task> {
   const url = `${API_BASE}/items/tasks/${id}/like`;
   const result = await fetchJSON<{ data: Task }>(url, {
     method: 'POST',
+    body: JSON.stringify({ target_type: targetType, target_id: targetId })
   });
   return result.data;
 }

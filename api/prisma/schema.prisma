@@ -95,15 +95,17 @@ model LoginLog {
 }
 
 model TaskLike {
-  id        String   @id @default(uuid())
-  taskId    String   @map("task_id")
-  userId    String   @map("user_id")
-  createdAt DateTime @default(now()) @map("created_at")
+  id         String   @id @default(uuid())
+  taskId     String   @map("task_id")
+  userId     String   @map("user_id")
+  targetType String   @map("target_type")
+  targetId   String   @map("target_id")
+  createdAt  DateTime @default(now()) @map("created_at")
 
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([taskId, userId])
+  @@unique([taskId, userId, targetType, targetId])
   @@map("task_likes")
 }
 

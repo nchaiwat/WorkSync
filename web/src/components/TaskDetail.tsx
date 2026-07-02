@@ -159,16 +159,31 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
     return matchesAssignee || matchesManager || matchesCollaborators;
   }, [task, currentUser]);
 
-  const hasLiked = useMemo(() => {
-    if (!currentUser || !task.likes) return false;
-    return task.likes.some(like => like.user_id === currentUser.id);
-  }, [task.likes, currentUser]);
+  const getUpdateLikes = (updateKey: string) => {
+    if (!task.likes) return [];
+    return task.likes.filter(like => like.target_type === 'update' && like.target_id === updateKey);
+  };
 
-  const handleToggleLike = async () => {
+  const hasLikedUpdate = (updateKey: string) => {
+    if (!currentUser) return false;
+    return getUpdateLikes(updateKey).some(like => like.user_id === currentUser.id);
+  };
+
+  const getCommentLikes = (commentId: string) => {
+    if (!task.likes) return [];
+    return task.likes.filter(like => like.target_type === 'comment' && like.target_id === commentId);
+  };
+
+  const hasLikedComment = (commentId: string) => {
+    if (!currentUser) return false;
+    return getCommentLikes(commentId).some(like => like.user_id === currentUser.id);
+  };
+
+  const handleToggleLike = async (targetType: string, targetId: string) => {
     if (!currentUser) return;
     setIsTogglingLike(true);
     try {
-      const updated = await api.toggleTaskLike(task.id);
+      const updated = await api.toggleTaskLike(task.id, targetType, targetId);
       onUpdate(updated);
     } catch (err: any) {
       alert(err.message || 'ไม่สามารถดำเนินการได้');
@@ -910,11 +925,11 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                   </div>
                   <div className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap leading-relaxed">
                     {update.content}
-                    {isCurrentUserInvolved && idx === 0 && (
+                    {isCurrentUserInvolved && (
                       <>
                         {' '}
                         <button
-                          onClick={handleToggleLike}
+                          onClick={() => { if (!hasLikedUpdate(update.key)) handleToggleLike('update', update.key); }}
                           disabled={isTogglingLike}
                           className="inline-flex items-center justify-center p-0 bg-transparent hover:scale-110 active:scale-90 transition-transform select-none align-middle"
                           title="กดไลค์ (อ่านแล้ว)"
@@ -965,34 +980,50 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
 
                   <div className="pt-2 border-t border-gray-100 dark:border-slate-700 space-y-2">
                     <div className="text-xs font-bold text-gray-500 dark:text-gray-400">ความคิดเห็นต่ออัปเดตนี้ ({commentsForUpdate.length})</div>
-                    {commentsForUpdate.map(c => (
-                      <div key={c.id} className="text-xs bg-gray-50 dark:bg-slate-700/50 p-2.5 rounded-lg border border-gray-100 dark:border-slate-700">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                          <UserDisplay name={getUserDisplayName(c.user)} size="sm" telegramId={getUserTelegramId(c.user)} />
-                          <span className="text-gray-400 font-normal">
-                            {new Date(c.created_at).toLocaleDateString('th-TH', {
-                              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                            })}
-                          </span>
-                        </div>
-                        <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
-                          {c.message}
-                          {isCurrentUserInvolved && (
-                            <>
-                              {' '}
-                              <button
-                                onClick={handleToggleLike}
-                                disabled={isTogglingLike}
-                                className="inline-flex items-center justify-center p-0 bg-transparent hover:scale-110 active:scale-90 transition-transform select-none align-middle"
-                                title="กดไลค์ (อ่านแล้ว)"
-                              >
-                                👍
-                              </button>
-                            </>
+                    {commentsForUpdate.map(c => {
+                      const commentLikes = getCommentLikes(c.id);
+                      return (
+                        <div key={c.id} className="text-xs bg-gray-50 dark:bg-slate-700/50 p-2.5 rounded-lg border border-gray-100 dark:border-slate-700 space-y-1.5">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                            <UserDisplay name={getUserDisplayName(c.user)} size="sm" telegramId={getUserTelegramId(c.user)} />
+                            <span className="text-gray-400 font-normal">
+                              {new Date(c.created_at).toLocaleDateString('th-TH', {
+                                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                              })}
+                            </span>
+                          </div>
+                          <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
+                            {c.message}
+                            {isCurrentUserInvolved && (
+                              <>
+                                {' '}
+                                <button
+                                  onClick={() => { if (!hasLikedComment(c.id)) handleToggleLike('comment', c.id); }}
+                                  disabled={isTogglingLike}
+                                  className="inline-flex items-center justify-center p-0 bg-transparent hover:scale-110 active:scale-90 transition-transform select-none align-middle"
+                                  title="กดไลค์ (อ่านแล้ว)"
+                                >
+                                  👍
+                                </button>
+                              </>
+                            )}
+                          </p>
+
+                          {commentLikes.length > 0 && (
+                            <div className="flex items-center gap-1.5 pt-1.5 border-t border-dashed border-slate-200 dark:border-slate-600 text-[10px] text-slate-500 dark:text-slate-400">
+                              <span className="text-blue-500">👍</span>
+                              <span className="font-semibold text-slate-655 dark:text-slate-355">อ่านแล้ว:</span>
+                              <span className="font-medium text-slate-700 dark:text-slate-300">
+                                {commentLikes.map(like => {
+                                  const name = getUserDisplayName(like.formatted_name || like.nickname || like.first_name || like.username);
+                                  return name.split('/')[0];
+                                }).join(', ')}
+                              </span>
+                            </div>
                           )}
-                        </p>
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
                     <div className="flex gap-2 pt-1">
                       <input
                         type="text"
@@ -1028,48 +1059,51 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
               ความคิดเห็น ({comments.filter(c => !c.update_key).length})
             </div>
 
-            {task.likes && task.likes.length > 0 && (
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                <span className="text-blue-500">👍</span>
-                <span className="font-semibold text-slate-655 dark:text-slate-355">อ่านแล้ว:</span>
-                <span className="font-medium text-slate-700 dark:text-slate-300">
-                  {task.likes.map(like => {
-                    const name = getUserDisplayName(like.formatted_name || like.nickname || like.first_name || like.username);
-                    return name.split('/')[0];
-                  }).join(', ')}
-                </span>
-              </div>
-            )}
-
             {/* General comments (will appear under first update once it exists) */}
-            {comments.filter(c => !c.update_key).map(c => (
-              <div key={c.id} className="text-xs bg-white dark:bg-slate-800 p-2.5 rounded-lg border border-gray-200 dark:border-slate-700">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  <UserDisplay name={getUserDisplayName(c.user)} size="sm" telegramId={getUserTelegramId(c.user)} />
-                  <span className="text-gray-400 font-normal">
-                    {new Date(c.created_at).toLocaleDateString('th-TH', {
-                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                    })}
-                  </span>
-                </div>
-                <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
-                  {c.message}
-                  {isCurrentUserInvolved && (
-                    <>
-                      {' '}
-                      <button
-                        onClick={handleToggleLike}
-                        disabled={isTogglingLike}
-                        className="inline-flex items-center justify-center p-0 bg-transparent hover:scale-110 active:scale-90 transition-transform select-none align-middle"
-                        title="กดไลค์ (อ่านแล้ว)"
-                      >
-                        👍
-                      </button>
-                    </>
+            {comments.filter(c => !c.update_key).map(c => {
+              const commentLikes = getCommentLikes(c.id);
+              return (
+                <div key={c.id} className="text-xs bg-white dark:bg-slate-800 p-2.5 rounded-lg border border-gray-200 dark:border-slate-700 space-y-1.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    <UserDisplay name={getUserDisplayName(c.user)} size="sm" telegramId={getUserTelegramId(c.user)} />
+                    <span className="text-gray-400 font-normal">
+                      {new Date(c.created_at).toLocaleDateString('th-TH', {
+                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                  <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
+                    {c.message}
+                    {isCurrentUserInvolved && (
+                      <>
+                        {' '}
+                        <button
+                          onClick={() => { if (!hasLikedComment(c.id)) handleToggleLike('comment', c.id); }}
+                          disabled={isTogglingLike}
+                          className="inline-flex items-center justify-center p-0 bg-transparent hover:scale-110 active:scale-90 transition-transform select-none align-middle"
+                          title="กดไลค์ (อ่านแล้ว)"
+                        >
+                          👍
+                        </button>
+                      </>
+                    )}
+                  </p>
+
+                  {commentLikes.length > 0 && (
+                    <div className="flex items-center gap-1.5 pt-1.5 border-t border-dashed border-slate-200 dark:border-slate-750 text-[10px] text-slate-500 dark:text-slate-400">
+                      <span className="text-blue-500">👍</span>
+                      <span className="font-semibold text-slate-655 dark:text-slate-355">อ่านแล้ว:</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
+                        {commentLikes.map(like => {
+                          const name = getUserDisplayName(like.formatted_name || like.nickname || like.first_name || like.username);
+                          return name.split('/')[0];
+                        }).join(', ')}
+                      </span>
+                    </div>
                   )}
-                </p>
-              </div>
-            ))}
+                </div>
+              );
+            })}
             <div className="flex gap-2">
               <input
                 type="text"

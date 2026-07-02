@@ -91,7 +91,9 @@ export class TasksController {
             first_name: u.firstName,
             nickname: u.nickname,
             department: u.department,
-            formatted_name: displayName
+            formatted_name: displayName,
+            target_type: l.targetType,
+            target_id: l.targetId
           };
         }) : [],
       };
@@ -169,9 +171,10 @@ export class TasksController {
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/like')
-  async toggleLike(@Param('id') id: string, @Req() req: express.Request) {
+  async toggleLike(@Param('id') id: string, @Body() body: any, @Req() req: express.Request) {
     const user = req.user as any;
-    const updated = await this.tasksService.toggleLike(id, user.id);
+    const { target_type, target_id } = body;
+    const updated = await this.tasksService.addLike(id, user.id, target_type, target_id);
     const formatted = await this.formatTasks([updated], user.id);
     return { data: formatted[0] };
   }

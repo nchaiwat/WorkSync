@@ -25,6 +25,8 @@ export interface Task {
     nickname?: string | null;
     department?: string | null;
     formatted_name?: string;
+    target_type?: string;
+    target_id?: string;
   }[];
   is_unread?: boolean;
   last_read_at?: string | null;
