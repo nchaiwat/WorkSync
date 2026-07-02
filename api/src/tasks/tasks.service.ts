@@ -350,14 +350,12 @@ export class TasksService {
   }
 
   async addLike(taskId: string, userId: string, targetType: string, targetId: string): Promise<any> {
-    const existing = await this.prisma.taskLike.findUnique({
+    const existing = await this.prisma.taskLike.findFirst({
       where: {
-        taskId_userId_targetType_targetId: {
-          taskId,
-          userId,
-          targetType,
-          targetId
-        }
+        taskId,
+        userId,
+        targetType,
+        targetId
       }
     });
 
