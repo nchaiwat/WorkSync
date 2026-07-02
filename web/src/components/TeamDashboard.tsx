@@ -49,24 +49,17 @@ export default function TeamDashboard({ members, loading, isMyTasks = false }: T
   const [unreadMembers, setUnreadMembers] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    try {
-      const reads = JSON.parse(localStorage.getItem('worksync_read_tasks') || '{}');
-      const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-      const unreadMap: Record<string, boolean> = {};
-      
-      for (const member of members) {
-        unreadMap[member.name] = member.tasks.some((t) => {
-          const time = new Date(t.updated_at || t.created_at).getTime();
-          if (time <= oneDayAgo) return false;
-          const lastRead = reads[t.id];
-          if (!lastRead) return true;
-          return time > new Date(lastRead).getTime();
-        });
-      }
-      setUnreadMembers(unreadMap);
-    } catch {
-      // Fail silently
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const unreadMap: Record<string, boolean> = {};
+    
+    for (const member of members) {
+      unreadMap[member.name] = member.tasks.some((t) => {
+        const time = new Date(t.updated_at || t.created_at).getTime();
+        if (time <= oneDayAgo) return false;
+        return t.is_unread ?? false;
+      });
     }
+    setUnreadMembers(unreadMap);
   }, [members]);
 
   if (loading) {

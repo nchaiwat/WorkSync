@@ -30,7 +30,7 @@ export class TasksController {
     private readonly usersService: UsersService,
   ) {}
 
-  private async formatTasks(tasks: any[]) {
+  private async formatTasks(tasks: any[], loggedInUserId?: string) {
     const users = await this.usersService.findAll();
     const userMap = new Map(users.map((u) => [u.id, u]));
 
@@ -42,50 +42,66 @@ export class TasksController {
       return `${nick}(${u.firstName})/${u.department || 'ไม่ระบุแผนก'}`;
     };
 
-    return tasks.map((t) => ({
-      id: t.id,
-      title: t.title,
-      description: t.description,
-      status: t.status,
-      priority: t.priority,
-      progress: t.progress,
-      deadline: t.deadline ? t.deadline.toISOString() : null,
-      avatar_url: t.avatarUrl,
-      collaborators: t.collaborators,
-      creator_id: t.createdBy,
-      created_by_name: formatCreator(t.createdBy),
-      created_at: t.createdAt.toISOString(),
-      updated_at: t.updatedAt.toISOString(),
-      assignee: t.assignee,
-      manager: t.manager,
-      latest_update: t.latestUpdate,
-      project_owner: t.projectOwner,
-      previous_progress: t.previousProgress,
-      is_archived: t.isArchived,
-      archive_reason: t.archiveReason,
-      likes: t.likes ? t.likes.map((l: any) => {
-        const u = l.user || userMap.get(l.userId);
-        if (!u) return { user_id: l.userId };
-        const displayName = (() => {
-          const nick = u.nickname ? `${u.nickname} ` : '';
-          const first = u.firstName || u.username || '';
-          const dept = u.department || 'IT';
-          return `${nick}(${first})/${dept}`;
-        })();
-        return {
-          user_id: l.userId,
-          username: u.username,
-          first_name: u.firstName,
-          nickname: u.nickname,
-          department: u.department,
-          formatted_name: displayName
-        };
-      }) : [],
-    }));
+    const taskIds = tasks.map((t) => t.id);
+    const readMap = loggedInUserId
+      ? await this.tasksService.getReadMapForUser(loggedInUserId, taskIds)
+      : new Map<string, Date>();
+
+    return tasks.map((t) => {
+      const lastReadAt = readMap.get(t.id);
+      const isUnread = lastReadAt
+        ? new Date(t.updatedAt || t.createdAt).getTime() > new Date(lastReadAt).getTime()
+        : true;
+
+      return {
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        status: t.status,
+        priority: t.priority,
+        progress: t.progress,
+        deadline: t.deadline ? t.deadline.toISOString() : null,
+        avatar_url: t.avatarUrl,
+        collaborators: t.collaborators,
+        creator_id: t.createdBy,
+        created_by_name: formatCreator(t.createdBy),
+        created_at: t.createdAt.toISOString(),
+        updated_at: t.updatedAt.toISOString(),
+        assignee: t.assignee,
+        manager: t.manager,
+        latest_update: t.latestUpdate,
+        project_owner: t.projectOwner,
+        previous_progress: t.previousProgress,
+        is_archived: t.isArchived,
+        archive_reason: t.archiveReason,
+        is_unread: isUnread,
+        last_read_at: lastReadAt ? lastReadAt.toISOString() : null,
+        likes: t.likes ? t.likes.map((l: any) => {
+          const u = l.user || userMap.get(l.userId);
+          if (!u) return { user_id: l.userId };
+          const displayName = (() => {
+            const nick = u.nickname ? `${u.nickname} ` : '';
+            const first = u.firstName || u.username || '';
+            const dept = u.department || 'IT';
+            return `${nick}(${first})/${dept}`;
+          })();
+          return {
+            user_id: l.userId,
+            username: u.username,
+            first_name: u.firstName,
+            nickname: u.nickname,
+            department: u.department,
+            formatted_name: displayName
+          };
+        }) : [],
+      };
+    });
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get()
-  async findAll(@Query() query: any) {
+  async findAll(@Query() query: any, @Req() req: express.Request) {
+    const user = req.user as any;
     const status = query?.filter?.status?._eq || query['filter[status][_eq]'];
     const assignee = query?.filter?.assignee?._eq || query['filter[assignee][_eq]'];
     
@@ -94,7 +110,7 @@ export class TasksController {
     const isArchived = isArchivedQuery === 'true' || isArchivedQuery === true;
 
     const tasks = await this.tasksService.findAll({ status, assignee, isArchived });
-    const formatted = await this.formatTasks(tasks);
+    const formatted = await this.formatTasks(tasks, user.id);
 
     return {
       data: formatted,
@@ -104,10 +120,12 @@ export class TasksController {
     };
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: string, @Req() req: express.Request) {
+    const user = req.user as any;
     const t = await this.tasksService.findOne(id);
-    const formatted = await this.formatTasks([t]);
+    const formatted = await this.formatTasks([t], user.id);
     return { data: formatted[0] };
   }
 
@@ -120,7 +138,7 @@ export class TasksController {
 
     const t = await this.tasksService.create(body);
     const finalTask = await this.tasksService.findOne(t.id);
-    const formatted = await this.formatTasks([finalTask]);
+    const formatted = await this.formatTasks([finalTask], user.id);
     return { data: formatted[0] };
   }
 
@@ -145,7 +163,7 @@ export class TasksController {
 
     await this.tasksService.update(id, body);
     const finalTask = await this.tasksService.findOne(id);
-    const formatted = await this.formatTasks([finalTask]);
+    const formatted = await this.formatTasks([finalTask], user.id);
     return { data: formatted[0] };
   }
 
@@ -154,8 +172,16 @@ export class TasksController {
   async toggleLike(@Param('id') id: string, @Req() req: express.Request) {
     const user = req.user as any;
     const updated = await this.tasksService.toggleLike(id, user.id);
-    const formatted = await this.formatTasks([updated]);
+    const formatted = await this.formatTasks([updated], user.id);
     return { data: formatted[0] };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/read')
+  async markAsRead(@Param('id') id: string, @Req() req: express.Request) {
+    const user = req.user as any;
+    await this.tasksService.markAsRead(id, user.id);
+    return { data: { success: true } };
   }
 
   @UseGuards(JwtAuthGuard)

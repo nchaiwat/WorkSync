@@ -78,13 +78,7 @@ export default function TaskDetailPage() {
 
   useEffect(() => {
     if (task) {
-      try {
-        const reads = JSON.parse(localStorage.getItem('worksync_read_tasks') || '{}');
-        reads[task.id] = new Date().toISOString();
-        localStorage.setItem('worksync_read_tasks', JSON.stringify(reads));
-      } catch (e) {
-        console.error(e);
-      }
+      api.markTaskAsRead(task.id).catch(console.error);
     }
   }, [task]);
 

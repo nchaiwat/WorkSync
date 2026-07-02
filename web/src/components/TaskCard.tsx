@@ -21,22 +21,7 @@ function getLatestUpdateSnippet(latestUpdateText: string | null | undefined): st
 }
 
 export default function TaskCard({ task, compact = false, currentUserName, users }: TaskCardProps) {
-  const [isUnread, setIsUnread] = useState(false);
-
-  useEffect(() => {
-    try {
-      const reads = JSON.parse(localStorage.getItem('worksync_read_tasks') || '{}');
-      const lastRead = reads[task.id];
-      if (!lastRead) {
-        setIsUnread(true);
-      } else {
-        const time = new Date(task.updated_at || task.created_at).getTime();
-        setIsUnread(time > new Date(lastRead).getTime());
-      }
-    } catch {
-      setIsUnread(true);
-    }
-  }, [task.id, task.updated_at, task.created_at]);
+  const isUnread = task.is_unread ?? false;
 
   const getTelegramId = () => {
     if (!users) return undefined;

@@ -26,6 +26,8 @@ export interface Task {
     department?: string | null;
     formatted_name?: string;
   }[];
+  is_unread?: boolean;
+  last_read_at?: string | null;
 }
 
 export interface TaskComment {

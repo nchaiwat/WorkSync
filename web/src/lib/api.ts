@@ -332,6 +332,13 @@ export async function toggleTaskLike(id: string): Promise<Task> {
   return result.data;
 }
 
+export async function markTaskAsRead(id: string): Promise<void> {
+  const url = `${API_BASE}/items/tasks/${id}/read`;
+  await fetchJSON(url, {
+    method: 'POST',
+  });
+}
+
 // ─── Export API object ──────────────────────────────────────────────
 
 export const api = {
@@ -357,4 +364,5 @@ export const api = {
   sendAnnouncement,
   testTelegram,
   toggleTaskLike,
+  markTaskAsRead,
 };

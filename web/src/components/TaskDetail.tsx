@@ -908,21 +908,20 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                     <span>👤 เจ้าของงาน</span>
                     <span>🕒 {update.timestamp}</span>
                   </div>
-                  <div className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap leading-relaxed flex items-center justify-between gap-2">
-                    <span>{update.content}</span>
+                  <div className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap leading-relaxed">
+                    {update.content}
                     {isCurrentUserInvolved && idx === 0 && (
-                      <button
-                        onClick={handleToggleLike}
-                        disabled={isTogglingLike}
-                        className={`inline-flex items-center justify-center w-5 h-5 rounded-full border transition-all active:scale-95 flex-shrink-0 ${
-                          hasLiked
-                            ? 'bg-blue-100 dark:bg-blue-900 border-blue-400 text-blue-600 dark:text-blue-400 shadow-sm'
-                            : 'bg-white dark:bg-slate-700 border-slate-300 text-slate-400 dark:text-slate-500 hover:bg-slate-100'
-                        }`}
-                        title="กดไลค์ (อ่านแล้ว)"
-                      >
-                        👍
-                      </button>
+                      <>
+                        {' '}
+                        <button
+                          onClick={handleToggleLike}
+                          disabled={isTogglingLike}
+                          className="inline-flex items-center justify-center p-0 bg-transparent hover:scale-110 active:scale-90 transition-transform select-none align-middle"
+                          title="กดไลค์ (อ่านแล้ว)"
+                        >
+                          👍
+                        </button>
+                      </>
                     )}
                   </div>
                    {update.attachment && (() => {
@@ -976,21 +975,20 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                             })}
                           </span>
                         </div>
-                        <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap flex items-center justify-between gap-2">
-                          <span>{c.message}</span>
+                        <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
+                          {c.message}
                           {isCurrentUserInvolved && (
-                            <button
-                              onClick={handleToggleLike}
-                              disabled={isTogglingLike}
-                              className={`inline-flex items-center justify-center w-5 h-5 rounded-full border transition-all active:scale-95 flex-shrink-0 ${
-                                hasLiked
-                                  ? 'bg-blue-100 dark:bg-blue-900 border-blue-400 text-blue-600 dark:text-blue-400 shadow-sm'
-                                  : 'bg-white dark:bg-slate-700 border-slate-300 text-slate-400 dark:text-slate-500 hover:bg-slate-100'
-                              }`}
-                              title="กดไลค์ (อ่านแล้ว)"
-                            >
-                              👍
-                            </button>
+                            <>
+                              {' '}
+                              <button
+                                onClick={handleToggleLike}
+                                disabled={isTogglingLike}
+                                className="inline-flex items-center justify-center p-0 bg-transparent hover:scale-110 active:scale-90 transition-transform select-none align-middle"
+                                title="กดไลค์ (อ่านแล้ว)"
+                              >
+                                👍
+                              </button>
+                            </>
                           )}
                         </p>
                       </div>
@@ -1054,21 +1052,20 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                     })}
                   </span>
                 </div>
-                <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap flex items-center justify-between gap-2">
-                  <span>{c.message}</span>
+                <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
+                  {c.message}
                   {isCurrentUserInvolved && (
-                    <button
-                      onClick={handleToggleLike}
-                      disabled={isTogglingLike}
-                      className={`inline-flex items-center justify-center w-5 h-5 rounded-full border transition-all active:scale-95 flex-shrink-0 ${
-                        hasLiked
-                          ? 'bg-blue-100 dark:bg-blue-900 border-blue-400 text-blue-600 dark:text-blue-400 shadow-sm'
-                          : 'bg-white dark:bg-slate-700 border-slate-300 text-slate-400 dark:text-slate-500 hover:bg-slate-100'
-                      }`}
-                      title="กดไลค์ (อ่านแล้ว)"
-                    >
-                      👍
-                    </button>
+                    <>
+                      {' '}
+                      <button
+                        onClick={handleToggleLike}
+                        disabled={isTogglingLike}
+                        className="inline-flex items-center justify-center p-0 bg-transparent hover:scale-110 active:scale-90 transition-transform select-none align-middle"
+                        title="กดไลค์ (อ่านแล้ว)"
+                      >
+                        👍
+                      </button>
+                    </>
                   )}
                 </p>
               </div>

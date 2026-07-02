@@ -374,6 +374,32 @@ export class TasksService {
     return this.findOne(taskId);
   }
 
+  async markAsRead(taskId: string, userId: string): Promise<void> {
+    await this.prisma.taskRead.upsert({
+      where: {
+        taskId_userId: { taskId, userId }
+      },
+      update: {
+        readAt: new Date()
+      },
+      create: {
+        taskId,
+        userId,
+        readAt: new Date()
+      }
+    });
+  }
+
+  async getReadMapForUser(userId: string, taskIds: string[]): Promise<Map<string, Date>> {
+    const reads = await this.prisma.taskRead.findMany({
+      where: {
+        userId,
+        taskId: { in: taskIds }
+      }
+    });
+    return new Map(reads.map(r => [r.taskId, r.readAt]));
+  }
+
   async remove(id: string): Promise<void> {
     await this.findOne(id);
     await this.prisma.task.delete({ where: { id } });
