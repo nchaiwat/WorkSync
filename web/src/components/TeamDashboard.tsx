@@ -96,36 +96,36 @@ export default function TeamDashboard({ members, loading, isMyTasks = false }: T
               : 'bg-white dark:bg-slate-850 border-slate-300 dark:border-slate-700 hover:shadow-xl hover:border-blue-500 dark:hover:border-blue-400'
           }`}
         >
-          {/* Member Header */}
-          <div className="p-4 sm:p-5 border-b-2 flex items-center justify-between gap-3 bg-slate-50/80 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700/60">
-            <div className="flex items-center gap-3">
+           {/* Member Header */}
+          <div className="p-4 sm:p-5 border-b-2 flex items-center justify-between gap-3 bg-slate-50/80 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700/60 min-w-0">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
               {member.avatar_url ? (
                 <img
                   src={member.avatar_url}
                   alt={member.name}
-                  className="w-12 h-12 rounded-full object-cover"
+                  className="w-12 h-12 rounded-full object-cover flex-shrink-0"
                 />
               ) : (
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-md">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-md flex-shrink-0">
                   {getInitials(member.name)}
                 </div>
               )}
-              <div>
-                <h3 className="font-bold text-gray-900 dark:text-gray-100">
+              <div className="min-w-0 flex-1">
+                <h3 className="font-bold text-gray-900 dark:text-gray-100 truncate">
                   <UserDisplay name={member.name} telegramId={member.telegram_id} />
                 </h3>
-                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mt-0.5">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mt-0.5 truncate">
                   {member.completedTasks}/{member.totalTasks} tasks
                 </p>
                 {member.last_update && (
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 truncate">
                     อัปเดตล่าสุด: {formatThaiDate(member.last_update)}
                   </p>
                 )}
               </div>
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               {member.tasks.some(t => t.status !== 'done' && !t.is_archived && t.deadline && new Date(t.deadline).getTime() < Date.now()) && (
                 <span className="px-2 py-0.5 text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-md animate-pulse whitespace-nowrap">
                   ⚠️ เกินกำหนด
