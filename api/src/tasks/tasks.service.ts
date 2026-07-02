@@ -194,7 +194,7 @@ export class TasksService {
     return task;
   }
 
-  async findAll(filters?: { status?: string; assignee?: string; isArchived?: boolean }): Promise<Task[]> {
+  async findAll(filters?: { status?: string; assignee?: string; isArchived?: boolean }): Promise<any[]> {
     const whereClause: any = {};
     if (filters?.status) whereClause.status = filters.status;
     if (filters?.assignee) whereClause.assignee = filters.assignee;
@@ -204,12 +204,28 @@ export class TasksService {
 
     return this.prisma.task.findMany({
       where: whereClause,
+      include: {
+        likes: {
+          include: {
+            user: true
+          }
+        }
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async findOne(id: string): Promise<Task> {
-    const task = await this.prisma.task.findUnique({ where: { id } });
+  async findOne(id: string): Promise<any> {
+    const task = await this.prisma.task.findUnique({
+      where: { id },
+      include: {
+        likes: {
+          include: {
+            user: true
+          }
+        }
+      }
+    });
     if (!task) throw new NotFoundException('ไม่พบงานที่ระบุ');
     return task;
   }
@@ -323,6 +339,31 @@ export class TasksService {
 
       await this.telegramService.broadcastNotification(notifyIds, message);
     }
+  }
+
+  async toggleLike(taskId: string, userId: string): Promise<any> {
+    const existing = await this.prisma.taskLike.findUnique({
+      where: {
+        taskId_userId: { taskId, userId }
+      }
+    });
+
+    if (existing) {
+      await this.prisma.taskLike.delete({
+        where: {
+          taskId_userId: { taskId, userId }
+        }
+      });
+    } else {
+      await this.prisma.taskLike.create({
+        data: {
+          taskId,
+          userId
+        }
+      });
+    }
+
+    return this.findOne(taskId);
   }
 
   async remove(id: string): Promise<void> {

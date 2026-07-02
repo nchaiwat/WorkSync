@@ -18,6 +18,14 @@ export interface Task {
   previous_progress?: number;
   is_archived?: boolean;
   archive_reason?: string | null;
+  likes?: {
+    user_id: string;
+    username: string;
+    first_name: string;
+    nickname?: string | null;
+    department?: string | null;
+    formatted_name?: string;
+  }[];
 }
 
 export interface TaskComment {

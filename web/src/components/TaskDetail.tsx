@@ -14,6 +14,15 @@ interface TaskDetailProps {
   canEdit?: boolean;
   isCreator?: boolean;
   currentUserName: string;
+  currentUser?: {
+    id: string;
+    username: string;
+    first_name: string;
+    role: string;
+    formattedName: string;
+    nickname?: string;
+    department?: string;
+  } | null;
   onDelete?: (taskId: string, reason: string) => void;
   onArchive?: (taskId: string, reason: string) => void;
   users?: User[];
@@ -79,7 +88,7 @@ function parseTaskUpdates(latestUpdateText: string | null | undefined): ParsedUp
     });
 }
 
-export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator = false, currentUserName, onDelete, onArchive, users = [] }: TaskDetailProps) {
+export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator = false, currentUserName, currentUser, onDelete, onArchive, users = [] }: TaskDetailProps) {
   const statusConfig = STATUS_CONFIG[task.status];
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
@@ -110,6 +119,63 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
   useEffect(() => {
     loadComments();
   }, [task.id]);
+
+  const [isTogglingLike, setIsTogglingLike] = useState(false);
+
+  const isCurrentUserInvolved = useMemo(() => {
+    if (!currentUser) return false;
+    
+    const nameToMatch = currentUser.first_name || currentUser.username;
+    const displayNameToMatch = currentUser.formattedName;
+    const idToMatch = currentUser.id;
+
+    // Match assignee
+    const matchesAssignee = 
+      task.assignee === displayNameToMatch ||
+      task.assignee === nameToMatch ||
+      task.assignee === idToMatch ||
+      (currentUser.first_name && task.assignee?.includes(`(${currentUser.first_name})`)) ||
+      (currentUser.username && task.assignee?.includes(`(${currentUser.username})`));
+
+    // Match manager
+    const matchesManager = 
+      task.manager === displayNameToMatch ||
+      task.manager === nameToMatch ||
+      task.manager === idToMatch ||
+      (task.manager && (
+        (currentUser.first_name && task.manager.includes(`(${currentUser.first_name})`)) ||
+        (currentUser.username && task.manager.includes(`(${currentUser.username})`))
+      ));
+
+    // Match collaborators
+    const matchesCollaborators = (task.collaborators || []).some(collab => 
+      collab === displayNameToMatch ||
+      collab === nameToMatch ||
+      collab === idToMatch ||
+      (currentUser.first_name && collab.includes(`(${currentUser.first_name})`)) ||
+      (currentUser.username && collab.includes(`(${currentUser.username})`))
+    );
+
+    return matchesAssignee || matchesManager || matchesCollaborators;
+  }, [task, currentUser]);
+
+  const hasLiked = useMemo(() => {
+    if (!currentUser || !task.likes) return false;
+    return task.likes.some(like => like.user_id === currentUser.id);
+  }, [task.likes, currentUser]);
+
+  const handleToggleLike = async () => {
+    if (!currentUser) return;
+    setIsTogglingLike(true);
+    try {
+      const updated = await api.toggleTaskLike(task.id);
+      onUpdate(updated);
+    } catch (err: any) {
+      alert(err.message || 'ไม่สามารถดำเนินการได้');
+    } finally {
+      setIsTogglingLike(false);
+    }
+  };
 
   useEffect(() => {
     if (!isEditing && task && users.length > 0) {
@@ -766,6 +832,54 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
             </div>
           </div>
         )}
+      </div>
+
+      {/* Acknowledge (Like) Section */}
+      <div className="p-4 sm:p-6 border-b-2 border-slate-200 dark:border-slate-700/80 bg-slate-50/20 dark:bg-slate-900/5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            {isCurrentUserInvolved && (
+              <button
+                onClick={handleToggleLike}
+                disabled={isTogglingLike}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all shadow-sm active:scale-95 ${
+                  hasLiked
+                    ? 'bg-blue-50 dark:bg-blue-950/25 border-blue-400 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-950/40'
+                    : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                }`}
+              >
+                <span className="text-base">{hasLiked ? '👍' : '👍'}</span>
+                <span>{hasLiked ? 'อ่านแล้ว (ไลค์แล้ว)' : 'กดไลค์ (อ่านแล้ว)'}</span>
+              </button>
+            )}
+            {!isCurrentUserInvolved && (
+              <div className="text-xs text-slate-400 dark:text-slate-500 italic">
+                เฉพาะบุคคลที่เกี่ยวข้องกับงานนี้เท่านั้นที่กดไลค์เพื่อยืนยันการอ่านได้
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 flex flex-col sm:items-end">
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+              รายชื่อผู้ที่อ่านแล้ว ({task.likes?.length || 0})
+            </span>
+            <div className="flex flex-wrap gap-2 sm:justify-end">
+              {task.likes && task.likes.length > 0 ? (
+                task.likes.map((like) => (
+                  <span
+                    key={like.user_id}
+                    className="px-2.5 py-1 bg-blue-50/50 dark:bg-blue-950/10 rounded-lg text-xs font-medium text-slate-750 dark:text-slate-350 border border-blue-100/50 dark:border-blue-950/30 flex items-center gap-1 shadow-sm"
+                  >
+                    <span className="text-blue-500 text-xs">👍</span>
+                    <UserDisplay name={getUserDisplayName(like.formatted_name || like.nickname || like.first_name || like.username)} size="sm" telegramId={getUserTelegramId(like.username)} />
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-slate-400 dark:text-slate-500 italic">ยังไม่มีใครกดไลค์ (อ่านแล้ว)</span>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Task Update Section — always visible */}

@@ -13,7 +13,7 @@ export default function TaskDetailPage() {
   const taskId = params.id as string;
   const [task, setTask] = useState<Task | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; first_name: string; role: string; formattedName: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; first_name: string; role: string; formattedName: string; nickname?: string; department?: string } | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [canEdit, setCanEdit] = useState(false);
 
@@ -47,6 +47,8 @@ export default function TaskDetailPage() {
           first_name: user.first_name || '',
           role: roleId || 'user',
           formattedName: fullName,
+          nickname: user.nickname || '',
+          department: user.department || '',
         });
       })
       .catch(() => {
@@ -157,7 +159,7 @@ export default function TaskDetailPage() {
 
       <main className="max-w-4xl mx-auto px-4 py-6">
 
-        <TaskDetail task={task} onUpdate={handleUpdate} canEdit={canEdit} isCreator={currentUser?.id === task.creator_id} currentUserName={currentUser?.formattedName || 'Anonymous'} onDelete={handleDelete} onArchive={handleArchive} users={users} />
+        <TaskDetail task={task} onUpdate={handleUpdate} canEdit={canEdit} isCreator={currentUser?.id === task.creator_id} currentUserName={currentUser?.formattedName || 'Anonymous'} currentUser={currentUser} onDelete={handleDelete} onArchive={handleArchive} users={users} />
       </main>
     </div>
   );

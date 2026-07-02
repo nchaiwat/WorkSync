@@ -63,6 +63,24 @@ export class TasksController {
       previous_progress: t.previousProgress,
       is_archived: t.isArchived,
       archive_reason: t.archiveReason,
+      likes: t.likes ? t.likes.map((l: any) => {
+        const u = l.user || userMap.get(l.userId);
+        if (!u) return { user_id: l.userId };
+        const displayName = (() => {
+          const nick = u.nickname ? `${u.nickname} ` : '';
+          const first = u.firstName || u.username || '';
+          const dept = u.department || 'IT';
+          return `${nick}(${first})/${dept}`;
+        })();
+        return {
+          user_id: l.userId,
+          username: u.username,
+          first_name: u.firstName,
+          nickname: u.nickname,
+          department: u.department,
+          formatted_name: displayName
+        };
+      }) : [],
     }));
   }
 
@@ -101,7 +119,8 @@ export class TasksController {
     body.created_by = user.id;
 
     const t = await this.tasksService.create(body);
-    const formatted = await this.formatTasks([t]);
+    const finalTask = await this.tasksService.findOne(t.id);
+    const formatted = await this.formatTasks([finalTask]);
     return { data: formatted[0] };
   }
 
@@ -124,7 +143,17 @@ export class TasksController {
       body.archiveReason = body.archive_reason;
     }
 
-    const updated = await this.tasksService.update(id, body);
+    await this.tasksService.update(id, body);
+    const finalTask = await this.tasksService.findOne(id);
+    const formatted = await this.formatTasks([finalTask]);
+    return { data: formatted[0] };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/like')
+  async toggleLike(@Param('id') id: string, @Req() req: express.Request) {
+    const user = req.user as any;
+    const updated = await this.tasksService.toggleLike(id, user.id);
     const formatted = await this.formatTasks([updated]);
     return { data: formatted[0] };
   }

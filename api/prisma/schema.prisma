@@ -32,6 +32,7 @@ model User {
   lastAccess  DateTime? @map("last_access")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
+  likes       TaskLike[]
 
   @@map("users")
 }
@@ -60,6 +61,7 @@ model Task {
   archiveReason    String?  @map("archive_reason") @db.Text
 
   comments      Comment[]
+  likes         TaskLike[]
 
   @@map("tasks")
 }
@@ -88,4 +90,17 @@ model LoginLog {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("login_logs")
+}
+
+model TaskLike {
+  id        String   @id @default(uuid())
+  taskId    String   @map("task_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@map("task_likes")
 }
