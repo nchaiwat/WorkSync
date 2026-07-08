@@ -34,8 +34,8 @@ async function bootstrap() {
   });
 
   const port = process.env.PORT || 4000;
-  await app.listen(port);
-  console.log(`🚀 NestJS Backend API running on: http://localhost:${port}`);
+  await app.listen(port, '0.0.0.0');
+  console.log(`🚀 NestJS Backend API running on: http://0.0.0.0:${port}`);
 }
 bootstrap();
 
