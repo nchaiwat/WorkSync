@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import TeamDashboard from '@/components/TeamDashboard';
+import DashboardView from '@/components/DashboardView';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { getAuthToken, getAuthUsername, logout as authLogout, getMe, formatUserDisplayName, admin } from '@/lib/auth';
@@ -14,14 +15,14 @@ export default function Home() {
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  // Default tab is 'my_tasks', restored from sessionStorage on mount to avoid hydration issues
-  const [filter, setFilter] = useState<'my_tasks' | 'involved_tasks'>('my_tasks');
+  // Default tab is 'dash', restored from sessionStorage on mount to avoid hydration issues
+  const [filter, setFilter] = useState<'dash' | 'my_tasks' | 'involved_tasks'>('dash');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = sessionStorage.getItem('worksync_tab_filter');
-      if (saved === 'involved_tasks') {
-        setFilter('involved_tasks');
+      if (saved === 'my_tasks' || saved === 'involved_tasks' || saved === 'dash') {
+        setFilter(saved as any);
       }
     }
   }, []);
@@ -218,7 +219,10 @@ export default function Home() {
         return lastUpdate >= sevenDaysAgo;
       });
 
-      if (filter === 'my_tasks') {
+      if (filter === 'dash') {
+        // Dashboard shows all active related tasks
+        setTasks(activeTasks);
+      } else if (filter === 'my_tasks') {
         // "งานของฉัน" (My Tasks) shows tasks where I am the assignee
         const filtered = activeTasks.filter((t) => isUserMatch(t.assignee));
         setTasks(filtered);
@@ -233,7 +237,8 @@ export default function Home() {
         );
         setTasks(filtered);
       }
-    } catch {
+    } catch (err) {
+      console.error('Error loading tasks:', err);
       setTasks([]);
     } finally {
       setIsLoading(false);
@@ -538,6 +543,19 @@ export default function Home() {
               <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto scrollbar-none pb-1 sm:pb-0">
                 <button
                   onClick={() => {
+                    setFilter('dash');
+                    sessionStorage.setItem('worksync_tab_filter', 'dash');
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap ${
+                    filter === 'dash'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  📊 Dash
+                </button>
+                <button
+                  onClick={() => {
                     setFilter('my_tasks');
                     sessionStorage.setItem('worksync_tab_filter', 'my_tasks');
                   }}
@@ -657,9 +675,21 @@ export default function Home() {
         </div>
       </header>
 
+
+
       {/* Content */}
       <main className="max-w-4xl mx-auto px-4 py-6">
-        <TeamDashboard members={members} loading={isLoading} isMyTasks={filter === 'my_tasks'} />
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-pulse">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="bg-white dark:bg-slate-800 h-24 rounded-xl border border-slate-200 dark:border-slate-700" />
+            ))}
+          </div>
+        ) : filter === 'dash' ? (
+          <DashboardView tasks={unfilteredTasks} users={users} currentUserName={currentUser?.first_name || currentUser?.username} />
+        ) : (
+          <TeamDashboard members={members} loading={isLoading} isMyTasks={filter === 'my_tasks'} />
+        )}
       </main>
 
       {/* PIN Setup Modal */}
