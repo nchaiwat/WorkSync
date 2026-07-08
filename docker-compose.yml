@@ -51,8 +51,6 @@ services:
         - NEXT_PUBLIC_API_URL=http://api:4000
     container_name: worksync-nextjs
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:80:3000"
     environment:
       NEXT_PUBLIC_API_URL: "http://api:4000"
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
