@@ -5,8 +5,6 @@ services:
     image: postgres:16
     container_name: worksync-postgres
     restart: unless-stopped
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_USER: worksync
       POSTGRES_PASSWORD: worksync_password
