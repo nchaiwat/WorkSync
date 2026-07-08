@@ -40,10 +40,10 @@ npx prisma db push
 
 # 3. รันตู้คอนเทนเนอร์ระบบโลคอลทั้งหมดพร้อมรีบิวด์
 cd ..
-docker-compose up --build -d
+docker compose up --build -d
 
 # 4. สั่งปิดตู้คอนเทนเนอร์ (เมื่อไม่ต้องการใช้งานแล้ว)
-docker-compose down
+docker compose down
 ```
 
 ---
@@ -61,10 +61,10 @@ git pull origin main
 ### 🐳 ฝั่ง Docker & Database (อัปเดตและรันงานจริง)
 ```bash
 # 1. รีบิวด์และเริ่มการทำงานตู้คอนเทนเนอร์ระบบตัวใหม่
-docker-compose up --build -d
+docker compose up --build -d
 
 # 2. ดันโครงสร้างฐานข้อมูลใหม่ล่าสุดเข้าสู่ Production Database (ปลอดภัย ข้อมูลเดิมไม่หาย)
-docker-compose exec api npx prisma db push
+docker compose exec api npx prisma db push
 ```
 
 ---
