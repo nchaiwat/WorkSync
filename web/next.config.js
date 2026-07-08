@@ -10,7 +10,7 @@ const nextConfig = {
     TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || '',
   },
   async rewrites() {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://api:4000';
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://worksync-api:4000';
     return [
       {
         source: '/auth/:path*',
