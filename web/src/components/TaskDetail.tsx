@@ -770,39 +770,48 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
 
       {/* Info Grid */}
       <div className="p-4 sm:p-6 border-b-2 border-slate-250 dark:border-slate-700/65 bg-slate-50/40 dark:bg-slate-900/10">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
+          {/* Assignee */}
+          <div className="flex items-center justify-between py-2 border-b border-slate-200/60 dark:border-slate-700/60">
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex-shrink-0">
               Assignee
-            </p>
-            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            </span>
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-100 text-right min-w-0">
               <UserDisplay name={getUserDisplayName(task.assignee)} telegramId={getUserTelegramId(task.assignee)} />
             </div>
           </div>
-          <div>
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+
+          {/* Manager */}
+          <div className="flex items-center justify-between py-2 border-b border-slate-200/60 dark:border-slate-700/60">
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex-shrink-0">
               Manager
-            </p>
-            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            </span>
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-100 text-right min-w-0">
               <UserDisplay name={getUserDisplayName(task.manager || '')} telegramId={getUserTelegramId(task.manager || '')} />
             </div>
           </div>
-          <div>
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+
+          {/* Project Owner */}
+          <div className="flex items-center justify-between py-2 border-b border-slate-200/60 dark:border-slate-700/60">
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex-shrink-0">
               Project Owner
-            </p>
-            <p className="text-sm font-bold text-indigo-650 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20 px-2 py-1.5 rounded-lg border border-indigo-100/60 dark:border-indigo-900/40 inline-block shadow-sm">
-              📂 {task.project_owner || '—'}
-            </p>
+            </span>
+            <div className="text-right">
+              <span className="text-sm font-bold text-indigo-650 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20 px-2 py-0.5 rounded-lg border border-indigo-100/65 dark:border-indigo-900/40 inline-block shadow-sm">
+                📂 {task.project_owner || '—'}
+              </span>
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+
+          {/* Deadline */}
+          <div className="flex items-center justify-between py-2 border-b border-slate-200/60 dark:border-slate-700/60">
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex-shrink-0">
               Deadline
-            </p>
-            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 flex items-center gap-1.5 flex-wrap">
-              <span>{deadlineDate ? deadlineDate.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'}</span>
+            </span>
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-100 flex items-center justify-end gap-1.5 flex-wrap">
+              <span>{deadlineDate ? deadlineDate.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</span>
               {deadlineDiff && (
-                <span className={`text-xs px-2 py-0.5 rounded ${
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                   isDone ? 'bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/30' :
                   deadlineDiff.text.includes('เกินกำหนด') ? 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30' :
                   deadlineDiff.text.includes('วันนี้') ? 'bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/30' :
@@ -811,42 +820,44 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
                   {deadlineDiff.text}
                 </span>
               )}
-            </p>
+            </div>
           </div>
-          
-          <div>
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+
+          {/* Created By */}
+          <div className="flex items-center justify-between py-2 border-b border-slate-200/60 dark:border-slate-700/60">
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex-shrink-0">
               Created By
-            </p>
-            <div className="text-sm font-medium text-gray-900 dark:text-gray-100 flex items-center gap-1">
-              <UserDisplay name={getUserDisplayName(task.created_by_name || task.creator_id || '')} telegramId={getUserTelegramId(task.created_by_name || task.creator_id || '')} />
-              {isCreator && <span className="text-xs text-gray-500 font-normal">(คุณ)</span>}
+            </span>
+            <div className="text-right flex flex-col items-end min-w-0">
+              <div className="text-sm font-medium text-gray-900 dark:text-gray-100 flex items-center gap-1 justify-end">
+                <UserDisplay name={getUserDisplayName(task.created_by_name || task.creator_id || '')} telegramId={getUserTelegramId(task.created_by_name || task.creator_id || '')} />
+                {isCreator && <span className="text-[10px] text-gray-500 font-normal flex-shrink-0">(คุณ)</span>}
+              </div>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                {new Date(task.created_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </p>
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              {new Date(task.created_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-            </p>
           </div>
+
+          {/* Collaborators */}
+          {task.collaborators && task.collaborators.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-slate-200/60 dark:border-slate-700/60 col-span-1 sm:col-span-2 gap-2">
+              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex-shrink-0">
+                Collaborators
+              </span>
+              <div className="flex flex-wrap gap-1.5 justify-end">
+                {task.collaborators.map((c, i) => (
+                  <span
+                    key={i}
+                    className="px-2 py-0.5 bg-gray-100 dark:bg-slate-700 rounded-full text-xs font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    <UserDisplay name={getUserDisplayName(c)} size="sm" telegramId={getUserTelegramId(c)} />
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-
-
-
-        {task.collaborators && task.collaborators.length > 0 && (
-          <div className="mt-4">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-              Collaborators
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {task.collaborators.map((c, i) => (
-                <span
-                  key={i}
-                  className="px-3 py-1 bg-gray-100 dark:bg-slate-700 rounded-full text-xs font-medium text-gray-700 dark:text-gray-300"
-                >
-                  <UserDisplay name={getUserDisplayName(c)} size="sm" telegramId={getUserTelegramId(c)} />
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
 

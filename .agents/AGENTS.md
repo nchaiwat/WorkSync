@@ -91,18 +91,25 @@ docker compose exec api npx prisma db push
 
 ---
 
-## 🚨 4. ข้อห้ามเด็ดขาด (Strict Prohibitions)
+## 🚨 4. ข้อห้ามและข้อตกลงเรื่องพอร์ต (Port Constraints & Rules)
 
-### ❌ ห้าม Map Ports ที่ Hostinger ครอบอยู่แล้ว
+### 📌 กฎข้อบังคับการรันพอร์ตบนเครื่องตัวเอง (Local Machine)
+* **ต้อง Map Port 80 ให้กับ nextjs-app เสมอ (`80:3000`)** เพื่อให้เปิดใช้งานด้วย `http://localhost` โดยตรง ห้ามสลับไปใช้พอร์ตอื่น เช่น 3000 หรือ 3001
+* หากเกิดการชนกันของพอร์ต 80 บนเครื่อง Local ให้เป็นหน้าที่ของผู้ใช้งานในการตรวจสอบและ Stop คอนเทนเนอร์อื่นด้วยตนเอง ห้ามเอเจนต์แก้ไขหรือลบพอร์ตนี้ออกจากไฟล์ `docker-compose.yml` เด็ดขาด
 
-| Port | ผู้ครอบ | ผลถ้า map | การแก้ไข |
-|------|---------|-----------|----------|
-| **80** | Traefik (Hostinger) | `Bind failed: port already allocated` | ลบ `ports:` ออกจาก nextjs-app |
-| **443** | Traefik (Hostinger) | เดียวกัน | ลบ `ports:` ออกจาก nextjs-app |
+### ❌ ห้าม Map Ports อื่นๆ ที่ Hostinger ครอบอยู่แล้วบน VPS
+
+| Port | ผู้ครอบบน VPS | ผลถ้า map | การแก้ไข |
+|------|--------------|-----------|----------|
+| **443** | Traefik (Hostinger) | `Bind failed: port already allocated` | ลบ `ports:` 443 ออกจาก service |
 | **5432** | Hostinger Docker postgres | `address already in use` | ลบ `ports:` ออกจาก postgres |
 
 ```yaml
-# ✅ ถูกต้อง: postgres และ nextjs-app ไม่มี ports section เลย
+# ✅ ตัวอย่างใน docker-compose.yml:
+# - postgres ไม่มี ports
+# - nextjs-app มีการ map 80:3000 ไว้สำหรับเครื่อง Local ส่วนบน VPS Traefik จะจัดการเองผ่าน labels 
+#   (ถ้าเป็นบน VPS ที่พอร์ต 80 ชน ผู้ใช้งานจะเป็นผู้ปิด container อื่นที่ชนเอง)
+
 postgres:
   image: postgres:16
   container_name: worksync-postgres
@@ -111,7 +118,8 @@ postgres:
 nextjs-app:
   build: ...
   container_name: worksync-nextjs
-  # ไม่มี ports! Traefik จัดการเองผ่าน labels
+  ports:
+    - "80:3000" # ต้องมีไว้สำหรับ localhost เสมอ
 ```
 
 ---

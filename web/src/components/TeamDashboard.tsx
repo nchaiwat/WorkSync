@@ -42,6 +42,37 @@ const formatThaiDate = (dateStr?: string) => {
   }) + ' น.';
 };
 
+function getMemberColor(name: string, isMyTasks: boolean) {
+  if (isMyTasks) {
+    // Blue/Sky color for My Tasks page
+    return {
+      bg: 'bg-sky-50 dark:bg-sky-950/45',
+      text: 'text-sky-800 dark:text-sky-300',
+      border: 'border-sky-200 dark:border-sky-900/40',
+    };
+  }
+
+  // Hash function to make color assignment deterministic per member name
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  // Beautiful random color presets excluding sky blue (so it remains distinct)
+  const colors = [
+    { bg: 'bg-emerald-50 dark:bg-emerald-950/45', text: 'text-emerald-800 dark:text-emerald-300', border: 'border-emerald-200/80 dark:border-emerald-900/40' },
+    { bg: 'bg-indigo-50 dark:bg-indigo-950/45', text: 'text-indigo-800 dark:text-indigo-300', border: 'border-indigo-200/80 dark:border-indigo-900/40' },
+    { bg: 'bg-amber-50 dark:bg-amber-950/45', text: 'text-amber-800 dark:text-amber-300', border: 'border-amber-200/85 dark:border-amber-900/40' },
+    { bg: 'bg-rose-50 dark:bg-rose-950/45', text: 'text-rose-800 dark:text-rose-300', border: 'border-rose-200/80 dark:border-rose-900/40' },
+    { bg: 'bg-violet-50 dark:bg-violet-950/45', text: 'text-violet-800 dark:text-violet-300', border: 'border-violet-200/80 dark:border-violet-900/40' },
+    { bg: 'bg-cyan-50 dark:bg-cyan-950/45', text: 'text-cyan-800 dark:text-cyan-300', border: 'border-cyan-200/80 dark:border-cyan-900/40' },
+    { bg: 'bg-orange-55/70 dark:bg-orange-950/45', text: 'text-orange-850 dark:text-orange-350', border: 'border-orange-200/80 dark:border-orange-900/40' },
+  ];
+
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
+}
+
 
 
 export default function TeamDashboard({ members, loading, isMyTasks = false }: TeamDashboardProps) {
@@ -86,62 +117,76 @@ export default function TeamDashboard({ members, loading, isMyTasks = false }: T
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-      {members.map((member) => (
-        <div
-          key={member.name}
-          onClick={() => router.push(`/tasks?creator=${encodeURIComponent(member.name)}`)}
-          className={`rounded-xl border-2 overflow-hidden cursor-pointer transition-all duration-200 flex flex-col ${
-            isMyTasks
-              ? 'bg-white dark:bg-slate-850 border-purple-400 dark:border-purple-600 hover:shadow-xl hover:border-purple-500 dark:hover:border-purple-400'
-              : 'bg-white dark:bg-slate-850 border-slate-300 dark:border-slate-700 hover:shadow-xl hover:border-blue-500 dark:hover:border-blue-400'
-          }`}
-        >
-           {/* Member Header */}
-          <div className="p-4 sm:p-5 border-b-2 flex items-center justify-between gap-3 bg-slate-50/80 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700/60 min-w-0">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              {member.avatar_url ? (
-                <img
-                  src={member.avatar_url}
-                  alt={member.name}
-                  className="w-12 h-12 rounded-full object-cover flex-shrink-0"
-                />
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-md flex-shrink-0">
-                  {getInitials(member.name)}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <h3 className="font-bold text-gray-900 dark:text-gray-100 truncate">
-                  <UserDisplay name={member.name} telegramId={member.telegram_id} />
-                </h3>
-                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                  {member.completedTasks}/{member.totalTasks} tasks
-                </p>
-                {member.last_update && (
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 truncate">
-                    อัปเดตล่าสุด: {formatThaiDate(member.last_update)}
-                  </p>
+      {members.map((member) => {
+        const memberColor = getMemberColor(member.name, isMyTasks);
+        return (
+          <div
+            key={member.name}
+            onClick={() => router.push(`/tasks?creator=${encodeURIComponent(member.name)}`)}
+            className={`rounded-xl border-2 overflow-hidden cursor-pointer transition-all duration-200 flex flex-col ${
+              isMyTasks
+                ? 'bg-white dark:bg-slate-850 border-purple-400 dark:border-purple-600 hover:shadow-xl hover:border-purple-500 dark:hover:border-purple-400'
+                : 'bg-white dark:bg-slate-850 border-slate-300 dark:border-slate-700 hover:shadow-xl hover:border-blue-500 dark:hover:border-blue-400'
+            }`}
+          >
+             {/* Member Header */}
+            <div className="border-b-2 flex items-stretch bg-slate-50/80 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700/60 min-w-0">
+              {/* Avatar Column (Left Column) */}
+              <div className="p-3 flex items-center justify-center flex-shrink-0 border-r-2 border-slate-200 dark:border-slate-700/60 bg-slate-100/30 dark:bg-slate-900/10">
+                {member.avatar_url ? (
+                  <img
+                    src={member.avatar_url}
+                    alt={member.name}
+                    className="w-12 h-12 rounded-full object-cover shadow-sm flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-md flex-shrink-0">
+                    {getInitials(member.name)}
+                  </div>
                 )}
               </div>
-            </div>
-            
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {member.tasks.some(t => t.status !== 'done' && !t.is_archived && t.deadline && new Date(t.deadline).getTime() < Date.now()) && (
-                <span className="px-2 py-0.5 text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-md animate-pulse whitespace-nowrap">
-                  ⚠️ เกินกำหนด
-                </span>
-              )}
-              {unreadMembers[member.name] && (
-                <span className="relative flex h-2.5 w-2.5 mr-1" title="มีการอัปเดตงานเมื่อเร็วๆ นี้">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
-                </span>
-              )}
-            </div>
-          </div>
 
-          {/* Task Stats (Body) */}
-          <div className="p-4 sm:p-5 bg-white dark:bg-slate-800 flex-1 flex flex-col justify-center">
+              {/* Info Column (Right Column) */}
+              <div className="flex-1 min-w-0 flex flex-col justify-between">
+                {/* Row 1: Name Band (Stripe) */}
+                <div className={`px-3 py-1.5 border-b-2 flex items-center justify-center min-w-0 ${memberColor.bg} ${memberColor.text} ${memberColor.border}`}>
+                  <h3 className="font-bold truncate leading-tight w-full text-center">
+                    <UserDisplay name={member.name} noDeptBadge={true} />
+                  </h3>
+                </div>
+
+                {/* Rows 2 & 3: Other info */}
+                <div className="p-2 px-3 flex flex-col gap-0.5 justify-center flex-1">
+                  {/* Row 2: Tasks Count & Overdue Badge */}
+                  <div className="flex items-center gap-1.5 flex-wrap min-w-0 leading-none">
+                    <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 truncate">
+                      {member.completedTasks}/{member.totalTasks} tasks
+                    </span>
+                    {member.tasks.some(t => t.status !== 'done' && !t.is_archived && t.deadline && new Date(t.deadline).getTime() < Date.now()) && (
+                      <span className="px-1.5 py-0.5 text-[9px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-md animate-pulse whitespace-nowrap">
+                        ⚠️ เกินกำหนด
+                      </span>
+                    )}
+                    {unreadMembers[member.name] && (
+                      <span className="relative flex h-2 w-2 ml-0.5 flex-shrink-0" title="มีการอัปเดตงานเมื่อเร็วๆ นี้">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Row 3: Last Update Date */}
+                  {member.last_update && (
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate leading-none mt-0.5">
+                      อัปเดตล่าสุด: {formatThaiDate(member.last_update)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Task Stats (Body) */}
+            <div className="p-3 bg-white dark:bg-slate-800 flex-1 flex flex-col justify-center">
             <div className="grid grid-cols-4 gap-1.5">
               <div className="text-center p-1.5 bg-gray-50 dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600">
                 <p className="text-base font-bold text-gray-900 dark:text-gray-100">
@@ -170,7 +215,8 @@ export default function TeamDashboard({ members, loading, isMyTasks = false }: T
             </div>
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
