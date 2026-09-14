@@ -7,6 +7,9 @@ import * as crypto from 'crypto';
 import { User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
+import { SettingsService } from '../settings/settings.service';
+import { TransactionLogsService } from '../transaction-logs/transaction-logs.service';
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -14,6 +17,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly settingsService: SettingsService,
+    private readonly transactionLogsService: TransactionLogsService,
   ) {}
 
   // ─── AES-256-GCM Encryption (Deprecating but keeping if needed elsewhere) ─
@@ -39,7 +44,16 @@ export class AuthService {
     username: string,
     password: string,
   ): Promise<{ success: boolean; token?: string; message?: string }> {
-    const gatewayUrl = this.configService.get<string>('AD_GATEWAY_URL') || 'http://172.17.0.1:3100/api/v2/login';
+    let gatewayUrl = await this.settingsService.get('ciam_ad_gateway_url', '');
+    if (gatewayUrl) {
+      gatewayUrl = gatewayUrl.replace(/\/+$/, '');
+      if (!gatewayUrl.includes('/api/v2/login')) {
+        gatewayUrl = `${gatewayUrl}/api/v2/login`;
+      }
+    } else {
+      gatewayUrl = this.configService.get<string>('AD_GATEWAY_URL') || 'http://172.17.0.1:3100/api/v2/login';
+    }
+
     const appId = this.configService.get<string>('AD_APP_ID') || 'worksync';
     const secretKey = this.configService.get<string>('AD_SECRET_KEY') || 'EAAD6F0F70CE84DF67037F2D835511927D964493B7BB986C61CF20272D9A87EC';
 
@@ -158,6 +172,7 @@ export class AuthService {
       const isLocalMatch = await bcrypt.compare(pass, user.password);
       if (isLocalMatch) {
         await this.recordLoginLog(user.username, 'AD', ipAddress, 'ACCEPT', 'เข้าสู่ระบบผ่าน Active Directory สำเร็จ (ใช้ข้อมูลที่แคชไว้)');
+        await this.checkAndRecordBreakGlassLogin(user.username, ipAddress);
         const { password, ...result } = user;
         return result;
       }
@@ -181,6 +196,7 @@ export class AuthService {
         });
 
         await this.recordLoginLog(user.username, 'AD', ipAddress, 'ACCEPT', 'เข้าสู่ระบบผ่าน Active Directory สำเร็จ');
+        await this.checkAndRecordBreakGlassLogin(user.username, ipAddress);
 
         const { password, ...result } = user;
         return result;
@@ -194,9 +210,11 @@ export class AuthService {
     const isMatch = await bcrypt.compare(pass, user.password);
     if (isMatch) {
       await this.recordLoginLog(user.username, 'LOCAL', ipAddress, 'ACCEPT', 'เข้าสู่ระบบสำเร็จ');
+      await this.checkAndRecordBreakGlassLogin(user.username, ipAddress);
       const { password, ...result } = user;
       return result;
     }
+
 
     await this.recordLoginLog(user.username, 'LOCAL', ipAddress, 'REJECT', 'รหัสผ่านไม่ถูกต้อง');
     return null;
@@ -278,4 +296,24 @@ export class AuthService {
     }
     return null;
   }
+
+  private async checkAndRecordBreakGlassLogin(username: string, ipAddress: string) {
+    try {
+      const isBreakGlass = await this.settingsService.getBoolean('ciam_break_glass_active', false);
+      if (isBreakGlass) {
+        const gatewayUrl = await this.settingsService.get('ciam_ad_gateway_url', 'http://192.168.12.11:3100');
+        await this.transactionLogsService.recordLog({
+          category: 'security_break_glass',
+          action: 'fallback_ad_login',
+          status: 'success',
+          message: `เข้าสู่ระบบผ่าน AD Gateway สำรองในช่วง Break-Glass: '${username}'`,
+          details: { username, gateway: gatewayUrl, ip: ipAddress },
+          triggeredBy: `user:${username}`,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to log break-glass audit:', err);
+    }
+  }
 }
+

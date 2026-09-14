@@ -122,3 +122,34 @@ model TaskRead {
   @@map("task_reads")
 }
 
+model SystemSetting {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  value       String?  @db.Text
+  description String?  @db.VarChar(250)
+  category    String   @default("general") @db.VarChar(50)
+  dataType    String   @default("string") @map("data_type") @db.VarChar(20)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([category])
+  @@index([key])
+  @@map("system_settings")
+}
+
+model TransactionLog {
+  id           Int      @id @default(autoincrement())
+  category     String   @db.VarChar(50)
+  action       String   @db.VarChar(100)
+  status       String   @default("success") @db.VarChar(20)
+  message      String   @db.VarChar(500)
+  details      String?  @db.Text
+  recordsCount Int      @default(0) @map("records_count")
+  durationMs   Int      @default(0) @map("duration_ms")
+  triggeredBy  String   @map("triggered_by") @db.VarChar(100)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([category])
+  @@index([createdAt(sort: Desc)])
+  @@map("transaction_logs")
+}
+

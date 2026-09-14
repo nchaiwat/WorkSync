@@ -7,10 +7,17 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './jwt.strategy';
 
+import { SettingsModule } from '../settings/settings.module';
+import { TransactionLogsModule } from '../transaction-logs/transaction-logs.module';
+import { CiamSsoService } from './ciam-sso.service';
+import { CiamSsoController } from './ciam-sso.controller';
+
 @Module({
   imports: [
     UsersModule,
     ConfigModule,
+    SettingsModule,
+    TransactionLogsModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -21,8 +28,9 @@ import { JwtStrategy } from './jwt.strategy';
       inject: [ConfigService],
     }),
   ],
-  providers: [AuthService, JwtStrategy],
-  controllers: [AuthController],
-  exports: [AuthService],
+  providers: [AuthService, JwtStrategy, CiamSsoService],
+  controllers: [AuthController, CiamSsoController],
+  exports: [AuthService, CiamSsoService],
 })
 export class AuthModule {}
+

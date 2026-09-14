@@ -7,6 +7,8 @@ import { UsersModule } from './users/users.module';
 import { TasksModule } from './tasks/tasks.module';
 import { CommentsModule } from './comments/comments.module';
 import { LoginLogsModule } from './login-logs/login-logs.module';
+import { SettingsModule } from './settings/settings.module';
+import { TransactionLogsModule } from './transaction-logs/transaction-logs.module';
 
 import { AppController } from './app.controller';
 
@@ -22,7 +24,10 @@ import { AppController } from './app.controller';
     TasksModule,
     CommentsModule,
     LoginLogsModule,
+    SettingsModule,
+    TransactionLogsModule,
   ],
   controllers: [AppController],
 })
+
 export class AppModule {}

@@ -193,7 +193,117 @@ export const admin = {
     const data = await res.json();
     return data;
   },
+
+  async getCiamSettings(token: string) {
+    const res = await fetch(`${API_BASE}/settings/ciam-sso`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      throw new Error('ไม่สามารถดึงข้อมูลการตั้งค่า Central IAM ได้');
+    }
+    return await res.json();
+  },
+
+  async updateCiamSettings(token: string, settings: any) {
+    const res = await fetch(`${API_BASE}/settings/ciam-sso`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(settings),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'บันทึกการตั้งค่า Central IAM ไม่สำเร็จ');
+    }
+    return await res.json();
+  },
+
+  async testCiamConnection(token: string) {
+    const res = await fetch(`${API_BASE}/settings/ciam-sso/test-connection`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'ทดสอบการเชื่อมต่อไม่สำเร็จ');
+    }
+    return await res.json();
+  },
+
+  async toggleBreakGlass(token: string, breakGlassActive: boolean, reason: string) {
+    const res = await fetch(`${API_BASE}/auth/sso/break-glass-toggle`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ break_glass_active: breakGlassActive, reason }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'สลับโหมด Break-Glass ไม่สำเร็จ');
+    }
+    return await res.json();
+  },
+
+  async getCiamLogs(token: string, category = 'ciam_sso', limit = 50) {
+    const res = await fetch(`${API_BASE}/settings/ciam-sso/logs?category=${encodeURIComponent(category)}&limit=${limit}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      throw new Error('ไม่สามารถดึงข้อมูล Transaction Logs ได้');
+    }
+    return await res.json();
+  },
 };
+
+// ─── SSO Public Functions ───────────────────────────────────────────
+
+export async function getSsoConfig() {
+  const res = await fetch(`${API_BASE}/auth/sso/config`, {
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    return {
+      sso_enabled: false,
+      break_glass_active: false,
+      ciam_base_url: '',
+      client_id: '',
+      login_button_label: 'เข้าสู่ระบบด้วย Central IAM (SSO)',
+      fallback_ad_available: true,
+    };
+  }
+  return await res.json();
+}
+
+export async function getSsoAuthorizeUrl(redirectUri: string) {
+  const res = await fetch(`${API_BASE}/auth/sso/authorize-url`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ redirect_uri: redirectUri }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'ไม่สามารถขอ Authorize URL จากระบบได้');
+  }
+  return await res.json();
+}
+
+export async function ssoCallback(code: string, codeVerifier: string, redirectUri: string) {
+  const res = await fetch(`${API_BASE}/auth/sso/callback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, code_verifier: codeVerifier, redirect_uri: redirectUri }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'การยืนยันตัวตน SSO ล้มเหลว');
+  }
+  return await res.json();
+}
+
 
 // ─── Cookie Helpers ─────────────────────────────────────────────────
 
