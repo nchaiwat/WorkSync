@@ -127,12 +127,25 @@ export class SettingsService implements OnModuleInit {
     const fieldMap: Record<string, { val: any; dataType: string; desc: string }> = {
       ciam_base_url: { val: dto.ciam_base_url, dataType: 'string', desc: 'URL หลักของ Central IAM Engine' },
       ciam_client_id: { val: dto.ciam_client_id, dataType: 'string', desc: 'Client ID ที่ลงทะเบียนไว้ใน Central IAM Portal' },
-      ciam_sso_enabled: { val: dto.ciam_sso_enabled !== undefined ? String(dto.ciam_sso_enabled) : undefined, dataType: 'boolean', desc: 'สวิตช์หลักเปิด/ปิดการเข้าใช้งานด้วย Central IAM SSO' },
-      ciam_break_glass_active: { val: dto.ciam_break_glass_active !== undefined ? String(dto.ciam_break_glass_active) : undefined, dataType: 'boolean', desc: 'โหมดปลดระบบฉุกเฉิน' },
+      ciam_sso_enabled: {
+        val: dto.ciam_sso_enabled !== undefined
+          ? String(dto.ciam_sso_enabled === true || String(dto.ciam_sso_enabled).toLowerCase() === 'true')
+          : undefined,
+        dataType: 'boolean',
+        desc: 'สวิตช์หลักเปิด/ปิดการเข้าใช้งานด้วย Central IAM SSO',
+      },
+      ciam_break_glass_active: {
+        val: dto.ciam_break_glass_active !== undefined
+          ? String(dto.ciam_break_glass_active === true || String(dto.ciam_break_glass_active).toLowerCase() === 'true')
+          : undefined,
+        dataType: 'boolean',
+        desc: 'โหมดปลดระบบฉุกเฉิน',
+      },
       ciam_ad_gateway_url: { val: dto.ciam_ad_gateway_url, dataType: 'string', desc: 'URL เซิร์ฟเวอร์ AD Gateway ภายในองค์กร' },
       ciam_auto_provision_group: { val: dto.ciam_auto_provision_group, dataType: 'string', desc: 'ชื่อกลุ่มสิทธิ์เริ่มต้น' },
       ciam_session_ttl_minutes: { val: dto.ciam_session_ttl_minutes !== undefined ? String(dto.ciam_session_ttl_minutes) : undefined, dataType: 'integer', desc: 'อายุ Access Token ของระบบลูก' },
     };
+
 
     // Special secret handling: skip if empty or masked like sec_****
     if (dto.ciam_client_secret && !dto.ciam_client_secret.includes('****')) {

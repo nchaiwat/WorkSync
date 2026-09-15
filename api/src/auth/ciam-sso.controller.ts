@@ -14,8 +14,9 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import * as express from 'express';
 import { Role } from '@prisma/client';
 
-@Controller('auth/sso')
+@Controller(['auth/sso', 'api/auth/sso'])
 export class CiamSsoController {
+
   constructor(
     private readonly ciamSsoService: CiamSsoService,
     private readonly settingsService: SettingsService,

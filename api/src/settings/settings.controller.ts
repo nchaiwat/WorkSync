@@ -15,8 +15,9 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import * as express from 'express';
 import { Role } from '@prisma/client';
 
-@Controller('settings')
+@Controller(['settings', 'api/settings'])
 export class SettingsController {
+
   constructor(
     private readonly settingsService: SettingsService,
     private readonly transactionLogsService: TransactionLogsService,

@@ -32,8 +32,21 @@ const nextConfig = {
         source: '/admin/:path*',
         destination: `${backendUrl}/admin/:path*`,
       },
+      {
+        source: '/settings/:path*',
+        destination: `${backendUrl}/settings/:path*`,
+      },
+      {
+        source: '/api/settings/:path*',
+        destination: `${backendUrl}/settings/:path*`,
+      },
+      {
+        source: '/api/auth/:path*',
+        destination: `${backendUrl}/auth/:path*`,
+      },
     ];
   },
+
 };
 
 module.exports = nextConfig;
