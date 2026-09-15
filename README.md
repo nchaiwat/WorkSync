@@ -1,206 +1,139 @@
-# WorkSync — Task Tracking System
+# WorkSync — Enterprise Task Tracking & Collaboration System
 
-ระบบติดตามงานแบบ Real-time สำหรับทีม ใช้ Directus v11 + PostgreSQL 16 + Next.js 14 + Tailwind CSS + PWA
+ระบบบริหารจัดการและติดตามงานภายในองค์กร (Task Tracking & Team Collaboration Platform) สำหรับ Window Asia  
+รองรับการทำงานทั้งบน Desktop และ Mobile PWA เชื่อมต่อกับระบบยืนยันตัวตนกลาง **Window Asia Central IAM**
+
+---
 
 ## 📋 Tech Stack
 
-| Component | Technology |
-|-----------|------------|
-| Backend API | Directus v11 (Headless CMS) |
-| Database | PostgreSQL 16 |
-| Frontend | Next.js 14 (App Router, TypeScript) |
-| Styling | Tailwind CSS |
-| Mobile | PWA (Progressive Web App) |
-| Notifications | Telegram Bot API |
-| Container | Docker Compose |
+| Component | Technology | Description |
+|-----------|------------|-------------|
+| **Backend API** | NestJS (TypeScript) | Modular REST API with JWT, Central IAM SSO & Prisma ORM |
+| **Database** | PostgreSQL 16 | Relational DB with connection pooling |
+| **ORM** | Prisma ORM v5.22.0 | Type-safe database client and schema management |
+| **Frontend** | Next.js 14 (App Router) | React 18, Server & Client Components, TypeScript |
+| **Styling** | Tailwind CSS | Modern responsive design & Dark mode support |
+| **Mobile** | Progressive Web App (PWA) | Installable on iOS & Android |
+| **Notifications** | Telegram Bot API | Real-time alerts on new tasks & status updates |
+| **Identity & SSO** | Window Asia Central IAM | OAuth 2.0 (PKCE S256) + JWKS RS256 + Break-Glass AD Gateway |
+| **Reverse Proxy** | Traefik v3 (VPS) | SSL/TLS Termination & Host-based routing |
+| **Containers** | Docker & Docker Compose | Containerized microservices |
 
-## 🚀 Quick Start
+---
 
-### 1. Clone & Setup
+## 🚀 Quick Start (Local Development)
 
+### 1. Requirements
+- Node.js 18+ or 20+
+- Docker & Docker Desktop
+
+### 2. Setup Environment
 ```bash
-cd D:\Python\WorkSync
-
-# Copy environment file
+# คัดลอก Environment Template
 copy .env.example .env
-
-# Edit .env with your values (especially Telegram tokens)
+copy api\.env.example api\.env
 ```
 
-### 2. Start All Services
-
+### 3. Database Schema Push & Seed
 ```bash
-docker-compose up -d
+# ซิงค์โครงสร้างตารางเข้า PostgreSQL
+cd api
+npx prisma db push --accept-data-loss
+node prisma/seed.js
+cd ..
 ```
 
-Services จะรันที่:
+### 4. Start with Docker Compose
+```bash
+# สร้าง Network จำลอง (สำหรับครั้งแรก)
+docker network create root_default
+
+# รันระบบทั้งหมด
+docker compose up --build -d
+```
+
+- **Next.js Web:** `http://localhost` (พอร์ต 80 ผ่าน `docker-compose.override.yml`)
+- **NestJS API:** `http://localhost:4000`
 - **PostgreSQL:** `localhost:5432`
-- **Directus Admin:** `http://localhost:8055/admin`
-- **Next.js App:** `http://localhost:3000`
 
-### 3. Setup Directus Collections
+---
 
-1. เปิด `http://localhost:8055/admin`
-2. Login ด้วย:
-   - Email: `admin@worksync.local`
-   - Password: `admin_password_123`
+## ☁️ Deployment Guide (VPS Production)
 
-3. สร้าง Collection `tasks`:
-   - ไปที่ **Data Model** → **Create Collection**
-   - Collection Name: `tasks`
-   - Primary Key: `id` (auto)
+กรุณาศึกษาคำแนะนำและข้อห้ามอย่างละเอียดใน [`HANDOFF.md`](file:///d:/Python/WorkSync/HANDOFF.md) และ [`.agents/AGENTS.md`](file:///d:/Python/WorkSync/.agents/AGENTS.md)
 
-4. เพิ่ม Fields ใน `tasks`:
-
-| Field Key | Type | Notes |
-|-----------|------|-------|
-| `title` | String | Required |
-| `description` | Text | |
-| `progress` | Integer | Min: 0, Max: 100, Default: 0 |
-| `deadline` | Date/Time | |
-| `status` | Selection | Options: `todo`, `in_progress`, `review`, `done` |
-| `assignee` | String | ชื่อพนักงาน |
-| `manager` | String | ชื่อผู้จัดการ |
-| `collaborators` | JSON | Array ของชื่อผู้ร่วมงาน |
-| `avatar_url` | String | URL รูปภาพโปรไฟล์ |
-
-5. สร้าง Collection `task_comments`:
-   - Collection Name: `task_comments`
-   - Fields:
-
-| Field Key | Type | Relation |
-|-----------|------|----------|
-| `task` | M2O → tasks | |
-| `user` | String | |
-| `message` | Text | |
-
-### 4. Access the App
-
-เปิดเบราว์เซอร์ไปที่ `http://localhost:3000`
-
-## 📱 Create Telegram Bot
-
-1. เปิด Telegram → ค้นหา `@BotFather`
-2. ส่งคำสั่ง `/newbot`
-3. ตั้งชื่อและ username
-4. เก็บ **Token** ที่ได้
-5. สร้าง Group หรือใช้ Chat ส่วนตัว
-6. ส่งข้อความให้ Bot ใน Group
-7. เปิด `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates`
-8. หา `chat.id` จาก response
-9. ใส่ค่าใน `.env`:
-   ```
-   TELEGRAM_BOT_TOKEN=123456:ABC-xyz...
-   TELEGRAM_CHAT_ID=-1001234567890
-   ```
-
-## 📁 Project Structure
-
-```
-D:\Python\WorkSync\
-├── docker-compose.yml          # Docker services
-├── .env.example                # Environment template
-├── README.md                   # This file
-└── app/                        # Next.js Application
-    ├── Dockerfile              # Docker build for Next.js
-    ├── package.json
-    ├── next.config.js          # Next.js config (PWA)
-    ├── tailwind.config.ts
-    ├── tsconfig.json
-    ├── .env.local
-    ├── public/
-    │   └── manifest.json       # PWA manifest
-    └── src/
-        ├── app/                # App Router
-        │   ├── layout.tsx
-        │   ├── page.tsx        # Dashboard
-        │   ├── tasks/
-        │   │   ├── page.tsx    # Task List
-        │   │   └── [id]/page.tsx # Task Detail
-        │   └── globals.css
-        ├── components/
-        │   ├── TaskCard.tsx
-        │   ├── TeamDashboard.tsx
-        │   ├── TaskList.tsx
-        │   ├── TaskDetail.tsx
-        │   └── CommentSection.tsx
-        ├── lib/
-        │   └── api.ts          # API Layer (no @directus/sdk)
-        └── types/
-            └── index.ts        # TypeScript types
-```
-
-## 🔧 Configuration
-
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DIRECTUS_URL` | Directus internal URL | `http://localhost:8055` |
-| `NEXT_PUBLIC_API_URL` | Directus public URL | `http://localhost:8055` |
-| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token | - |
-| `TELEGRAM_CHAT_ID` | Telegram Chat ID | - |
-
-### Ports
-
-| Service | Port |
-|---------|------|
-| Next.js | 3000 |
-| Directus | 8055 |
-| PostgreSQL | 5432 |
-
-## 🎨 Features
-
-- **Dashboard** — Team View แบบการ์ด แสดง progress แต่ละคน
-- **Task Management** — CRUD tasks, update progress, change status
-- **Comments** — แลกเปลี่ยนความคิดเห็นใน task
-- **PWA** — ติดตั้งบนมือถือได้, ทำงาน offline ได้บางส่วน
-- **Dark Mode** — รองรับธีมมืด
-- **Mobile First** — Responsive design
-- **Telegram Notifications** — แจ้งเตือนเมื่อมี task ใหม่ หรือ progress เปลี่ยน
-
-## 🛠 Development
-
+### ลำดับคำสั่ง Deploy บน VPS:
 ```bash
-# Run in development mode
-cd app
-npm run dev
+# 1. ดึงโค้ดล่าสุด
+git pull origin main
 
-# Build for production
-npm run build
-npm start
+# 2. ซิงค์ตารางฐานข้อมูล (ห้ามใช้ prisma migrate เด็ดขาด ข้อมูลจะหาย)
+docker compose exec api npx prisma db push --accept-data-loss
+
+# 3. ใส่ข้อมูลเริ่มต้น
+docker compose exec api node prisma/seed.js
+
+# 4. Rebuild Container ที่มีการแก้ไข
+docker compose up --build -d api
+docker compose up --build -d nextjs-app
+
+# ⚠️ สำคัญมาก: ทุกครั้งหลัง Rebuild api ต้อง Restart nextjs-app เสมอ เพื่อล้าง DNS Cache
+docker compose restart nextjs-app
 ```
 
-## 📝 API Layer
+---
 
-ระบบใช้ custom API layer ใน `src/lib/api.ts` แทน `@directus/sdk` โดยตรง:
+## 🔐 Authentication & Central IAM SSO (v2.0.0 Zero `.env` Edition)
 
-```typescript
-// ตัวอย่างการใช้งาน
-import { api } from '@/lib/api';
+ระบบรองรับ 3 รูปแบบการยืนยันตัวตน:
+1. **Central IAM SSO (Primary):**
+   - OAuth 2.0 Authorization Code Flow พร้อม PKCE S256
+   - ตรวจสอบความถูกต้องของ JWT Access Token ด้วย RS256 JWKS Public Key
+   - Auto-Provisioning ผู้ใช้งานใหม่อัตโนมัติพร้อมกำหนด Role เริ่มต้น
+2. **Standard Credentials (Clean Login):**
+   - เมื่อปิดสวิตช์ SSO ในหน้า Admin (`/admin/settings`) หน้า Login จะเข้าสู่โหมด Clean ทันที
+   - ล็อกอินด้วย Username / Email และรหัสผ่านที่บันทึกไว้ใน Local Database
+3. **Break-Glass Emergency Panel:**
+   - ในกรณีที่ Central IAM มีปัญหาขัดข้อง แอดมินสามารถเปิดโหมดฉุกเฉิน
+   - ระบบจะสลับเส้นทางไปตรวจสอบสิทธิ์ผ่าน Active Directory Gateway สำรองภายในองค์กรโดยตรง
 
-const tasks = await api.getTasks();
-const task = await api.getTaskById(id);
-await api.createTask({ title: 'New Task', assignee: 'John' });
-await api.updateTaskProgress(id, 50);
+---
+
+## 📁 โครงสร้างโปรเจกต์ (Project Structure)
+
+```
+WorkSync/
+├── api/                           # NestJS Backend API
+│   ├── prisma/
+│   │   ├── schema.prisma          # Prisma Database Schema
+│   │   └── seed.js                # Database Initial Seed
+│   └── src/
+│       ├── auth/                  # Local Auth & Central IAM SSO (PKCE/JWKS)
+│       ├── settings/              # Dynamic System Settings (Zero .env)
+│       ├── transaction-logs/      # ISO 27001 Security Audit Trails
+│       ├── tasks/                 # Task Management CRUD & Workflow
+│       └── users/                 # User Management & RBAC
+├── web/                           # Next.js 14 Frontend
+│   ├── next.config.js             # Rewrites to worksync-api
+│   ├── public/                    # Static Assets & PWA Manifest
+│   └── src/
+│       ├── app/                   # App Router Pages
+│       │   ├── admin/settings/    # System Settings & SSO Control Panel
+│       │   ├── auth/callback/     # OIDC PKCE Callback Handler
+│       │   ├── login/             # Dynamic Zero-Confusion Login
+│       │   └── tasks/             # Task Board & Details
+│       ├── components/            # Reusable UI Components
+│       └── lib/                   # API Client & Auth Helpers
+├── docker-compose.yml             # Main Docker Compose (VPS Production)
+├── docker-compose.override.yml    # Local Override (Map 80:3000 for localhost)
+├── HANDOFF.md                     # เอกสารส่งต่องานฉบับสมบูรณ์
+├── Memory.md                      # AI Agent Context & Constraints
+└── README.md                      # เอกสารนี้
 ```
 
-## 🐛 Troubleshooting
-
-### Directus ไม่ขึ้น
-```bash
-docker-compose logs directus
-```
-
-### Database connection error
-ตรวจสอบว่า PostgreSQL พร้อมแล้ว:
-```bash
-docker-compose logs postgres
-```
-
-### PWA ไม่ทำงาน
-ตรวจสอบว่า `manifest.json` ถูกโหลดที่ `/manifest.json`
+---
 
 ## 📄 License
 
-Internal Project — WindowAsia Co., Ltd.
+Internal Project — Window Asia Co., Ltd.
