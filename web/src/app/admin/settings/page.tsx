@@ -105,7 +105,11 @@ export default function AdminSettingsPage() {
     try {
       const res = await admin.getCiamSettings(token);
       if (res?.settings) {
-        setSettings(res.settings);
+        setSettings({
+          ...res.settings,
+          ciam_sso_enabled: res.settings.ciam_sso_enabled === true || res.settings.ciam_sso_enabled === 'true',
+          ciam_break_glass_active: res.settings.ciam_break_glass_active === true || res.settings.ciam_break_glass_active === 'true',
+        });
       }
       const logsRes = await admin.getCiamLogs(token, logCategory, 30);
       if (logsRes?.data) {
@@ -113,6 +117,32 @@ export default function AdminSettingsPage() {
       }
     } catch (err: any) {
       setError(err.message || 'ไม่สามารถโหลดการตั้งค่าได้');
+    }
+  };
+
+  const handleToggleSsoInstant = async () => {
+    const token = getAuthToken();
+    if (!token) return;
+
+    const nextState = !settings.ciam_sso_enabled;
+    setSettings((prev) => ({ ...prev, ciam_sso_enabled: nextState }));
+    setError('');
+    setSuccess('');
+
+    try {
+      const res = await admin.updateCiamSettings(token, {
+        ciam_sso_enabled: nextState,
+      });
+      setSuccess(
+        nextState
+          ? 'เปิดใช้งาน Central IAM SSO เรียบร้อยแล้ว (บันทึกอัตโนมัติ)'
+          : 'ปิดใช้งาน Central IAM SSO เรียบร้อยแล้ว (ระบบเข้าสู่โหมด Clean Standard Login)'
+      );
+      const logsRes = await admin.getCiamLogs(token, logCategory, 30);
+      if (logsRes?.data) setLogs(logsRes.data);
+    } catch (err: any) {
+      setSettings((prev) => ({ ...prev, ciam_sso_enabled: !nextState }));
+      setError(err.message || 'ไม่สามารถเปลี่ยนสถานะ SSO ได้');
     }
   };
 
@@ -147,7 +177,7 @@ export default function AdminSettingsPage() {
       const payload: any = {
         ciam_base_url: settings.ciam_base_url,
         ciam_client_id: settings.ciam_client_id,
-        ciam_sso_enabled: settings.ciam_sso_enabled,
+        ciam_sso_enabled: Boolean(settings.ciam_sso_enabled),
         ciam_ad_gateway_url: settings.ciam_ad_gateway_url,
         ciam_auto_provision_group: settings.ciam_auto_provision_group,
         ciam_session_ttl_minutes: Number(settings.ciam_session_ttl_minutes),
@@ -165,7 +195,11 @@ export default function AdminSettingsPage() {
       // Reload fresh settings
       const updated = await admin.getCiamSettings(token);
       if (updated?.settings) {
-        setSettings(updated.settings);
+        setSettings({
+          ...updated.settings,
+          ciam_sso_enabled: updated.settings.ciam_sso_enabled === true || updated.settings.ciam_sso_enabled === 'true',
+          ciam_break_glass_active: updated.settings.ciam_break_glass_active === true || updated.settings.ciam_break_glass_active === 'true',
+        });
       }
       const logsRes = await admin.getCiamLogs(token, logCategory, 30);
       if (logsRes?.data) setLogs(logsRes.data);
@@ -175,6 +209,7 @@ export default function AdminSettingsPage() {
       setIsSaving(false);
     }
   };
+
 
   const handleToggleBreakGlass = async () => {
     const token = getAuthToken();
@@ -535,16 +570,23 @@ export default function AdminSettingsPage() {
                   หากปิดสวิตช์นี้ หน้าจอล็อกอินจะเข้าสู่โหมด Clean Standard Login ตามข้อกำหนด Zero-Confusion
                 </span>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.ciam_sso_enabled}
-                  onChange={(e) => setSettings({ ...settings, ciam_sso_enabled: e.target.checked })}
-                  className="sr-only peer"
+              <button
+                type="button"
+                role="switch"
+                aria-checked={Boolean(settings.ciam_sso_enabled)}
+                onClick={handleToggleSsoInstant}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+                  settings.ciam_sso_enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-slate-600'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                    settings.ciam_sso_enabled ? 'translate-x-5' : 'translate-x-0'
+                  }`}
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              </label>
+              </button>
             </div>
+
 
             <div className="flex justify-end pt-4">
               <button

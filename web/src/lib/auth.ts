@@ -262,10 +262,31 @@ export const admin = {
 // ─── SSO Public Functions ───────────────────────────────────────────
 
 export async function getSsoConfig() {
-  const res = await fetch(`${API_BASE}/auth/sso/config`, {
-    cache: 'no-store',
-  });
-  if (!res.ok) {
+  try {
+    const res = await fetch(`${API_BASE}/auth/sso/config?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        Pragma: 'no-cache',
+      },
+    });
+    if (!res.ok) {
+      return {
+        sso_enabled: false,
+        break_glass_active: false,
+        ciam_base_url: '',
+        client_id: '',
+        login_button_label: 'เข้าสู่ระบบด้วย Central IAM (SSO)',
+        fallback_ad_available: true,
+      };
+    }
+    const data = await res.json();
+    return {
+      ...data,
+      sso_enabled: data.sso_enabled === true || data.sso_enabled === 'true',
+      break_glass_active: data.break_glass_active === true || data.break_glass_active === 'true',
+    };
+  } catch {
     return {
       sso_enabled: false,
       break_glass_active: false,
@@ -275,8 +296,8 @@ export async function getSsoConfig() {
       fallback_ad_available: true,
     };
   }
-  return await res.json();
 }
+
 
 export async function getSsoAuthorizeUrl(redirectUri: string) {
   const res = await fetch(`${API_BASE}/auth/sso/authorize-url`, {

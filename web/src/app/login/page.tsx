@@ -135,8 +135,9 @@ export default function LoginPage() {
   };
 
   // Zero-Confusion Conditions
-  const isBreakGlass = ssoConfig?.break_glass_active === true;
-  const isSsoEnabled = ssoConfig?.sso_enabled === true && !isBreakGlass;
+  const isBreakGlass = ssoConfig?.break_glass_active === true || (ssoConfig as any)?.break_glass_active === 'true';
+  const isSsoEnabled = (ssoConfig?.sso_enabled === true || (ssoConfig as any)?.sso_enabled === 'true') && !isBreakGlass;
+
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-slate-900 px-4">
