@@ -156,24 +156,32 @@ export class SettingsService implements OnModuleInit {
       };
     }
 
-    for (const [key, meta] of Object.entries(fieldMap)) {
-      if (meta.val !== undefined && meta.val !== null) {
-        const currentVal = await this.get(key, '');
-        if (currentVal !== String(meta.val)) {
-          await this.prisma.systemSetting.upsert({
-            where: { key },
-            update: { value: String(meta.val), dataType: meta.dataType },
-            create: {
-              key,
-              value: String(meta.val),
-              dataType: meta.dataType,
-              category: 'central_iam',
-              description: meta.desc,
-            },
-          });
-          changedFields.push(key);
+    try {
+      for (const [key, meta] of Object.entries(fieldMap)) {
+        if (meta.val !== undefined && meta.val !== null) {
+          const currentVal = await this.get(key, '');
+          if (currentVal !== String(meta.val)) {
+            await this.prisma.systemSetting.upsert({
+              where: { key },
+              update: { value: String(meta.val), dataType: meta.dataType },
+              create: {
+                key,
+                value: String(meta.val),
+                dataType: meta.dataType,
+                category: 'central_iam',
+                description: meta.desc,
+              },
+            });
+            changedFields.push(key);
+          }
         }
       }
+    } catch (dbErr: any) {
+      this.logger.error(`Failed to upsert systemSetting in database: ${dbErr.message}`, dbErr.stack);
+      if (dbErr.message?.includes('does not exist') || dbErr.code === 'P2021') {
+        throw new Error('ตารางฐานข้อมูล `system_settings` ยังไม่ถูกสร้าง กรุณารันคำสั่ง prisma db push บน VPS');
+      }
+      throw new Error(`เกิดข้อผิดพลาดในการบันทึกฐานข้อมูล: ${dbErr.message}`);
     }
 
     // Refresh memory cache immediately

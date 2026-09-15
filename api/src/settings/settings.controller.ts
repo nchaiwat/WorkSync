@@ -8,6 +8,8 @@ import {
   Query,
   UseGuards,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { SettingsService, UpdateCiamDto } from './settings.service';
 import { TransactionLogsService } from '../transaction-logs/transaction-logs.service';
@@ -50,14 +52,26 @@ export class SettingsController {
   @UseGuards(JwtAuthGuard)
   @Put('ciam-sso')
   async updateCiamSettings(
-    @Body() body: UpdateCiamDto,
+    @Body() body: any,
     @Req() req: express.Request,
   ) {
     const user = this.checkAdmin(req);
     const ip = this.getClientIp(req);
-    const result = await this.settingsService.updateCiamConfig(body, user.username || 'admin', ip);
-    return result;
+    try {
+      const result = await this.settingsService.updateCiamConfig(body, user.username || 'admin', ip);
+      return result;
+    } catch (err: any) {
+      console.error('[SettingsController] updateCiamSettings error:', err);
+      if (err instanceof HttpException) {
+        throw err;
+      }
+      throw new HttpException(
+        err.message || 'บันทึกการตั้งค่า Central IAM ไม่สำเร็จ',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
+
 
   @UseGuards(JwtAuthGuard)
   @Post('ciam-sso/test-connection')

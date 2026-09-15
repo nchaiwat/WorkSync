@@ -43,14 +43,19 @@ export class TransactionLogsService {
   }
 
   async getRecentLogs(category?: string, limit = 50) {
-    const where: any = {};
-    if (category) {
-      where.category = category;
+    try {
+      const where: any = {};
+      if (category) {
+        where.category = category;
+      }
+      return await this.prisma.transactionLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: Math.min(limit, 200),
+      });
+    } catch (err: any) {
+      this.logger.warn(`Could not query transaction logs: ${err.message}`);
+      return [];
     }
-    return this.prisma.transactionLog.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: Math.min(limit, 200),
-    });
   }
 }
