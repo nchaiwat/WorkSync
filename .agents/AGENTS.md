@@ -5,11 +5,13 @@
 
 ---
 
-## 📝 มาตรฐานการตอบกลับของ AI (AI Response Standard)
+## 📝 มาตรฐานการปฏิบัติงานและการตอบกลับของ AI (AI Response Standard & Workflow)
 
 ทุกครั้งที่มีการแก้ไขโค้ดเสร็จสิ้น ให้เอเจนต์ AI ปฏิบัติดังนี้โดยอัตโนมัติ:
-1. **อธิบายอย่างกระชับ** ว่ามีการแก้ไขส่วนใดบ้าง แก้ที่ไฟล์ไหน และผลลัพธ์เป็นอย่างไร
-2. **แนบชุดคำสั่ง Git และ Docker** สำหรับฝั่ง **Local** และ **VPS** ทันที เพื่อให้คุณสามารถคัดลอกไปใช้ได้ทันทีโดยไม่ต้องถามซ้ำ
+1. **Local Build & Test**: ทดสอบบิวด์ระบบฝั่ง Local ทั้งหมดให้มั่นใจว่าปราศจากข้อผิดพลาด หากพบ Error ต้องแก้ไขจนเสร็จสิ้น
+2. **Automated Git Push**: บันทึกและ Push ขึ้น `origin main` ให้เรียบร้อยทันที
+3. **อธิบายอย่างกระชับ**: ว่ามีการแก้ไขส่วนใดบ้าง แก้ที่ไฟล์ไหน และผลลัพธ์เป็นอย่างไร
+4. **แนบชุดคำสั่ง VPS ที่มี `cd /var/www/Worksync` เสมอ**: เพื่อให้คุณสามารถคัดลอกไปวางรันบน VPS ได้ทันทีโดยไม่ต้อง cd เอง
 
 ---
 
@@ -52,20 +54,23 @@ docker compose down
 
 ## ☁️ 2. คำสั่งสำหรับเซิร์ฟเวอร์หลัก (VPS)
 
-รันคำสั่งเหล่านี้หลังจากเชื่อมต่อ SSH เข้าไปยัง VPS และเข้าไปที่โฟลเดอร์โปรเจกต์แล้ว:
+รันคำสั่งเหล่านี้หลังจากเชื่อมต่อ SSH เข้าไปยัง VPS (มีคำสั่ง `cd /var/www/Worksync` รวมอยู่ด้วยเสมอ):
 
 ```bash
-# 1. ดึงโค้ดใหม่
+# 1. เข้าสู่โฟลเดอร์โปรเจกต์
+cd /var/www/Worksync
+
+# 2. ดึงโค้ดใหม่
 git pull origin main
 
-# 2. Rebuild เฉพาะ service ที่แก้ไข (อย่า rebuild ทั้งหมดโดยไม่จำเป็น)
+# 3. Rebuild เฉพาะ service ที่แก้ไข (อย่า rebuild ทั้งหมดโดยไม่จำเป็น)
 docker compose up --build -d nextjs-app   # กรณีแก้ frontend
 docker compose up --build -d api          # กรณีแก้ backend
 
 # ⚠️ สำคัญมาก: หลัง rebuild api → ต้อง restart nextjs ด้วยเสมอ (เพื่อล้าง DNS cache)
 docker compose restart nextjs-app
 
-# 3. อัปเดต schema DB (ถ้ามีการเปลี่ยน prisma/schema.prisma)
+# 4. อัปเดต schema DB (ถ้ามีการเปลี่ยน prisma/schema.prisma)
 docker compose exec api npx prisma db push
 ```
 

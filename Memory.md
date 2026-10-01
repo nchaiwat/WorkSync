@@ -1,11 +1,17 @@
 # WorkSync — AI Memory & System Constraints
 
-## 🛑 1. Operational & Resource Constraints (Standard Post-Edit Workflow)
-- **Mandatory Post-Modification Workflow (ขั้นตอนบังคับทุกครั้งหลังแก้ไขไฟล์เสร็จสิ้น)**:
-  1. **Local Build & Docker Compose**: รันและตรวจสอบระบบฝั่ง Local ด้วย `docker compose up --build -d` (และ `prisma db push` / `seed.js` หากมีการเปลี่ยน schema หรือ config) ให้เรียบร้อย
-  2. **Auto-Fix on Error**: หากพบ Error ในระหว่างบิวด์หรือรันตู้คอนเทนเนอร์ ให้ AI ตรวจสอบและแก้ไขโค้ดให้เรียบร้อยจนผ่านฉลุย
-  3. **Automated Git Push**: เมื่อบิวด์ผ่านและไม่มี Error ให้ทำ `git add .`, `git commit -m "..."` และ `git push origin main` ทันที
-  4. **VPS Command Reporting**: สรุปงานและแจ้งเฉพาะคำสั่งที่ผู้ใช้งานจะต้องนำไปรันบน VPS ต่อไปในคำตอบอย่างชัดเจน
+## 🛑 1. Operational & Resource Constraints (Standard Post-Edit Workflow — ข้อตกลงปฏิบัติการ)
+- **Mandatory Post-Modification Workflow (ขั้นตอนบังคับอัตโนมัติทุกครั้งหลังแก้ไขโค้ดเสร็จสิ้น)**:
+  1. **Local Build & Verification (สร้างและทดสอบฝั่ง Local)**:
+     - AI ต้องทำการ build และทดสอบโค้ดทั้งหมดฝั่ง Local (เช่น `npm --prefix api run build`, `npm --prefix web run build` หรือ `docker compose up --build -d`) ให้แน่ใจว่าไม่มี Error หรือข้อผิดพลาดใดๆ
+     - หากมี Schema หรือ Config เปลี่ยนแปลง ให้รัน `cd api && npx prisma db push --accept-data-loss && cd ..`
+  2. **Auto-Fix on Error (แก้จนผ่านอัตโนมัติ)**:
+     - หากพบข้อผิดพลาดระหว่าง build หรือรัน AI ต้องวิเคราะห์และแก้ไขโค้ดทันทีจนกระทั่งผ่านสมบูรณ์ 100%
+  3. **Automated Git Push (นำส่งโค้ดทันที)**:
+     - เมื่อตรวจสอบแล้วว่าทุกอย่าง Build ผ่านฉลุย ไม่พบ Error ให้ AI ทำการ `git add .`, `git commit -m "..."` และ `git push origin main` ขึ้น Git Server ทันทีโดยไม่ต้องรอให้สั่ง
+  4. **VPS Command Reporting with `cd /var/www/Worksync` (คำสั่งสำหรับ VPS)**:
+     - ชุดคำสั่ง VPS ที่แจ้งให้ผู้ใช้ทราบ **ต้องมีคำสั่ง `cd /var/www/Worksync` นำหน้าทุกครั้งเสมอ** ก่อนรันคำสั่ง Docker หรือคำสั่งอื่นๆ
+     - สรุปผลการแก้ไขอย่างกระชับ พร้อมแนบคำสั่งให้ผู้ใช้คัดลอกไปวางบน VPS ได้ทันที
 - **DO NOT run browser automated testing (`browser_subagent`) yourself**:
   - Consumes large amounts of quota rapidly.
   - Instead, write clear, step-by-step instructions for the user on how to verify/test changes manually.
