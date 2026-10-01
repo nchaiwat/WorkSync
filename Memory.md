@@ -61,6 +61,77 @@
 
 ## 🔐 5. Central IAM SSO (v2.0.0 Zero `.env` Architecture)
 - **Dynamic Config**: All OIDC and SSO configuration parameters reside in the `system_settings` table (managed via `SettingsService` with an in-memory cache).
-- **Zero-Confusion Standard**: When `ciam_sso_enabled` is false, `/login` immediately behaves as a 100% clean standard credentials form with no SSO elements.
+- **Dual Flow Support**:
+  - **SP-Initiated SSO**: ผู้ใช้กดล็อกอินจากหน้าเว็บ WorkSync จะสร้าง `code_verifier` (PKCE) เก็บใน `sessionStorage`
+  - **IdP-Initiated SSO (Portal Launch)**: ผู้ใช้กดเปิดแอปจากหน้า Central IAM Portal (`ciam.windowasia.com/portal`) จะไม่มี `code_verifier` ดังนั้น Backend ต้องรองรับแบบ `code_verifier` เป็น optional และใช้ `client_id` + `client_secret` ในการแลกรับ Token
+- **Zero-Confusion Standard**: เมื่อ `ciam_sso_enabled` is false, `/login` immediately behaves as a 100% clean standard credentials form with no SSO elements.
 - **Cache-Busting**: When fetching `/settings/ciam-sso` or `/auth/sso/config`, include `_t=${Date.now()}` query param and `cache: 'no-store'` header to ensure immediate toggle responsiveness.
 - **Audit Trails**: Major security actions (logins, settings changes, break-glass toggles) are recorded into `transaction_logs` via `TransactionLogsService`.
+
+---
+
+## ⚡ 6. คำสั่งสำคัญที่ใช้บ่อย (Essential Commands Cheat Sheet)
+
+### 💻 ฝั่งเครื่องคอมพิวเตอร์ของคุณ (Local Machine)
+
+```bash
+# ─── 1. Build & Test Verification (ทดสอบก่อน Deploy) ───
+npm --prefix api run build                  # ทดสอบบิวด์ NestJS Backend
+npm --prefix web run build                  # ทดสอบบิวด์ Next.js Frontend
+
+# ─── 2. Database Schema & Seed (ข้อมูลไม่หาย) ───
+cd api && npx prisma db push --accept-data-loss && cd ..   # ซิงค์ Schema เข้า DB Local
+cd api && node prisma/seed.js && cd ..                     # ลงข้อมูลตั้งค่าเริ่มต้น
+
+# ─── 3. Docker Compose (รันระบบบนเครื่องตัวเอง) ───
+docker compose up --build -d                # รันคอนเทนเนอร์ทั้งหมดพร้อมรีบิวด์
+docker compose up --build -d api            # รีบิวด์เฉพาะ API
+docker compose up --build -d nextjs-app     # รีบิวด์เฉพาะ Frontend
+docker compose restart nextjs-app           # ล้าง DNS Cache ใน Next.js
+docker compose down                         # หยุดและปิดคอนเทนเนอร์ทั้งหมด
+
+# ─── 4. Git Operations ───
+git status
+git add .
+git commit -m "คำอธิบายการแก้ไข"
+git push origin main
+```
+
+---
+
+### ☁️ ฝั่งเซิร์ฟเวอร์หลัก (VPS — ต้องมี `cd /var/www/Worksync` เสมอ)
+
+```bash
+# ─── 1. Standard Update & Deploy (แก้ทั่วไป) ───
+cd /var/www/Worksync
+git pull origin main
+docker compose up --build -d api
+docker compose restart nextjs-app
+
+# ─── 2. Deploy เมื่อแก้ Frontend ───
+cd /var/www/Worksync
+git pull origin main
+docker compose up --build -d nextjs-app
+
+# ─── 3. Deploy เมื่อมีการแก้ Database Schema หรือ Settings ใหม่ ───
+cd /var/www/Worksync
+git pull origin main
+docker compose exec api npx prisma db push --accept-data-loss
+docker compose exec api node prisma/seed.js
+docker compose up --build -d api
+docker compose restart nextjs-app
+
+# ─── 4. Rebuild ทั้งหมดแบบไม่ใช้ Cache (กรณีโค้ดไม่อัปเดต) ───
+cd /var/www/Worksync
+docker compose build --no-cache api nextjs-app
+docker compose up -d api nextjs-app
+docker compose restart nextjs-app
+
+# ─── 5. ตรวจสอบสถานะและ Troubleshooting บน VPS ───
+cd /var/www/Worksync
+docker compose ps                                         # ตรวจสอบสถานะคอนเทนเนอร์
+docker logs -f worksync-api --tail 50                     # ดู Log การทำงานของ Backend
+docker logs -f worksync-nextjs --tail 50                  # ดู Log การทำงานของ Frontend
+docker exec worksync-api env | grep CIAM                  # ตรวจสอบ Environment ของ API
+docker inspect worksync-api --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' # ดู IP ของ API
+```
