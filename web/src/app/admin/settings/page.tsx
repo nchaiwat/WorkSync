@@ -9,6 +9,7 @@ interface CiamSettings {
   ciam_base_url: string;
   ciam_client_id: string;
   ciam_client_secret_masked: string;
+  ciam_m2m_key_masked?: string;
   ciam_sso_enabled: boolean;
   ciam_break_glass_active: boolean;
   ciam_ad_gateway_url: string;
@@ -51,6 +52,7 @@ export default function AdminSettingsPage() {
     ciam_base_url: 'https://ciam.windowasia.com',
     ciam_client_id: 'worksync-spoke-client',
     ciam_client_secret_masked: '',
+    ciam_m2m_key_masked: '',
     ciam_sso_enabled: true,
     ciam_break_glass_active: false,
     ciam_ad_gateway_url: 'http://192.168.12.11:3100',
@@ -60,6 +62,9 @@ export default function AdminSettingsPage() {
 
   const [newSecret, setNewSecret] = useState('');
   const [showSecretInput, setShowSecretInput] = useState(false);
+
+  const [newM2mKey, setNewM2mKey] = useState('');
+  const [showM2mKeyInput, setShowM2mKeyInput] = useState(false);
 
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
   const [logs, setLogs] = useState<TransactionLog[]>([]);
@@ -187,10 +192,16 @@ export default function AdminSettingsPage() {
         payload.ciam_client_secret = newSecret.trim();
       }
 
+      if (newM2mKey.trim()) {
+        payload.ciam_m2m_key = newM2mKey.trim();
+      }
+
       const res = await admin.updateCiamSettings(token, payload);
       setSuccess(res.message || 'บันทึกการตั้งค่าเรียบร้อยแล้ว');
       setNewSecret('');
       setShowSecretInput(false);
+      setNewM2mKey('');
+      setShowM2mKeyInput(false);
 
       // Reload fresh settings
       const updated = await admin.getCiamSettings(token);
@@ -512,6 +523,44 @@ export default function AdminSettingsPage() {
                     </span>
                   </div>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Central IAM Management API Key (M2M Key)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={settings.ciam_m2m_key_masked || 'ยังไม่ได้กำหนด'}
+                    className="flex-1 px-3.5 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg bg-gray-100 dark:bg-slate-800/80 text-gray-500 dark:text-gray-400 font-mono select-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowM2mKeyInput(!showM2mKeyInput)}
+                    className="px-3 py-2 text-xs font-medium bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-lg text-gray-700 dark:text-gray-200 transition-colors whitespace-nowrap cursor-pointer"
+                  >
+                    {showM2mKeyInput ? 'ยกเลิก' : '🔑 เปลี่ยน M2M Key'}
+                  </button>
+                </div>
+                {showM2mKeyInput && (
+                  <div className="mt-2">
+                    <input
+                      type="password"
+                      value={newM2mKey}
+                      onChange={(e) => setNewM2mKey(e.target.value)}
+                      placeholder="ใส่ Management API Key สำหรับ CIAM M2M"
+                      className="w-full px-3.5 py-2 text-sm border border-blue-400 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                    <span className="text-[11px] text-amber-600 dark:text-amber-400 mt-1 block">
+                      ระบุเฉพาะเมื่อต้องการเปลี่ยน M2M Key ใหม่ (Header: X-Management-API-Key)
+                    </span>
+                  </div>
+                )}
+                <span className="text-[11px] text-gray-400 mt-1 block">
+                  ใช้สำหรับยืนยันตัวตนเมื่อ Central IAM ยิงคำสั่ง Directory/Reconciliation เข้ามา (หมวด C)
+                </span>
               </div>
 
               <div>

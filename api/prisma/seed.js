@@ -39,6 +39,7 @@ async function main() {
     { key: 'ciam_ad_gateway_url', value: 'http://192.168.12.11:3100', description: 'URL เซิร์ฟเวอร์ AD Gateway ภายในองค์กร', category: 'central_iam', dataType: 'string' },
     { key: 'ciam_auto_provision_group', value: 'User', description: 'ชื่อกลุ่มสิทธิ์เริ่มต้นสำหรับพนักงานใหม่ที่ล็อกอินผ่าน SSO ครั้งแรก', category: 'central_iam', dataType: 'string' },
     { key: 'ciam_session_ttl_minutes', value: '480', description: 'อายุ Access Token ของระบบลูก (ค่าแนะนำ: 8 ชั่วโมง / 480 นาที)', category: 'central_iam', dataType: 'integer' },
+    { key: 'ciam_m2m_key', value: 'sec_worksync_m2m_key_2026', description: 'รหัสผ่าน Management API Key สำหรับ Central IAM M2M Communication', category: 'central_iam', dataType: 'encrypted' },
   ];
 
   for (const s of defaultSettings) {

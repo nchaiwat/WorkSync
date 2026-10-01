@@ -1,10 +1,14 @@
 # WorkSync — AI Memory & System Constraints
 
-## 🛑 1. Operational & Resource Constraints
+## 🛑 1. Operational & Resource Constraints (Standard Post-Edit Workflow)
+- **Mandatory Post-Modification Workflow (ขั้นตอนบังคับทุกครั้งหลังแก้ไขไฟล์เสร็จสิ้น)**:
+  1. **Local Build & Docker Compose**: รันและตรวจสอบระบบฝั่ง Local ด้วย `docker compose up --build -d` (และ `prisma db push` / `seed.js` หากมีการเปลี่ยน schema หรือ config) ให้เรียบร้อย
+  2. **Auto-Fix on Error**: หากพบ Error ในระหว่างบิวด์หรือรันตู้คอนเทนเนอร์ ให้ AI ตรวจสอบและแก้ไขโค้ดให้เรียบร้อยจนผ่านฉลุย
+  3. **Automated Git Push**: เมื่อบิวด์ผ่านและไม่มี Error ให้ทำ `git add .`, `git commit -m "..."` และ `git push origin main` ทันที
+  4. **VPS Command Reporting**: สรุปงานและแจ้งเฉพาะคำสั่งที่ผู้ใช้งานจะต้องนำไปรันบน VPS ต่อไปในคำตอบอย่างชัดเจน
 - **DO NOT run browser automated testing (`browser_subagent`) yourself**:
   - Consumes large amounts of quota rapidly.
   - Instead, write clear, step-by-step instructions for the user on how to verify/test changes manually.
-- **Always provide concise explanations and the dual sets of Git & Docker commands (Local & VPS)** in every completion response.
 
 ---
 

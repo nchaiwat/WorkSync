@@ -9,6 +9,7 @@ import { CommentsModule } from './comments/comments.module';
 import { LoginLogsModule } from './login-logs/login-logs.module';
 import { SettingsModule } from './settings/settings.module';
 import { TransactionLogsModule } from './transaction-logs/transaction-logs.module';
+import { DirectoryModule } from './directory/directory.module';
 
 import { AppController } from './app.controller';
 
@@ -26,6 +27,7 @@ import { AppController } from './app.controller';
     LoginLogsModule,
     SettingsModule,
     TransactionLogsModule,
+    DirectoryModule,
   ],
   controllers: [AppController],
 })

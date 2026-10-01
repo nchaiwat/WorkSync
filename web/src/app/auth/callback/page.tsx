@@ -54,6 +54,10 @@ function CallbackContent() {
           document.cookie = `directus_first_name=${encodeURIComponent(result.user.first_name)}; path=/; max-age=604800; SameSite=Lax`;
         }
 
+        // Save auth provider for seamless logout
+        localStorage.setItem('app_auth_provider', 'ciam_sso');
+        localStorage.setItem('app_ciam_portal_url', 'https://ciam.windowasia.com/portal');
+
         // Clean up storage
         sessionStorage.removeItem('sso_code_verifier');
         sessionStorage.removeItem('sso_state');

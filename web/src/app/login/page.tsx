@@ -28,6 +28,7 @@ export default function LoginPage() {
     login_button_label: string;
   } | null>(null);
   const [ssoLoading, setSsoLoading] = useState(false);
+  const [showLocalForm, setShowLocalForm] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -121,6 +122,7 @@ export default function LoginPage() {
       document.cookie = `directus_username=${encodeURIComponent(username)}; path=/; max-age=604800; SameSite=Lax`;
       if (typeof window !== 'undefined') {
         localStorage.setItem('worksync_login_type', loginType);
+        localStorage.setItem('app_auth_provider', 'local');
       }
       try {
         const user = await getMe(result.access_token);
@@ -168,14 +170,14 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* สถานการณ์ที่ 1: Primary CTA — Central IAM SSO Button (เฉพาะเมื่อ sso_enabled = true และไม่อยู่ใน break-glass) */}
-          {isSsoEnabled && !isPinMode && (
-            <div className="mb-6">
+          {/* สถานการณ์ที่ 1: Single Primary CTA — เฉพาะเมื่อ sso_enabled = true, ไม่ได้อยู่ใน break-glass และยังไม่ได้กาง local form */}
+          {isSsoEnabled && !showLocalForm && !isPinMode && (
+            <div className="py-2">
               <button
                 type="button"
                 onClick={handleCiamSso}
                 disabled={ssoLoading || isLoading}
-                className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-700 text-white font-medium rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 group disabled:opacity-75 cursor-pointer"
+                className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-700 text-white font-medium rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2.5 group disabled:opacity-75 cursor-pointer"
               >
                 {ssoLoading ? (
                   <span className="flex items-center gap-2 text-sm">
@@ -187,22 +189,23 @@ export default function LoginPage() {
                   </span>
                 ) : (
                   <>
-                    <span className="text-lg">🛡️</span>
+                    <span className="text-xl">🛡️</span>
                     <span className="text-sm font-semibold tracking-wide">
-                      {ssoConfig?.login_button_label || 'เข้าสู่ระบบด้วย Central IAM (SSO)'}
+                      เข้าสู่ระบบด้วย Window Asia SSO ✨
                     </span>
-                    <span className="text-blue-200 group-hover:translate-x-0.5 transition-transform text-xs">⚡</span>
                   </>
                 )}
               </button>
 
-              {/* เส้นคั่น Divider */}
-              <div className="relative flex items-center justify-center my-4">
-                <div className="border-t border-gray-200 dark:border-slate-700 w-full"></div>
-                <span className="bg-white dark:bg-slate-800 px-3 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider font-medium">
-                  หรือเข้าสู่ระบบด้วยรหัสผ่าน
-                </span>
-                <div className="border-t border-gray-200 dark:border-slate-700 w-full"></div>
+              {/* ลิงก์สำรองสำหรับผู้ดูแลระบบ (Local Admin Link) */}
+              <div className="text-center mt-6 pt-4 border-t border-gray-100 dark:border-slate-700/60">
+                <button
+                  type="button"
+                  onClick={() => setShowLocalForm(true)}
+                  className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer"
+                >
+                  เข้าสู่ระบบด้วยบัญชี Local (กรณีฉุกเฉิน) →
+                </button>
               </div>
             </div>
           )}
@@ -267,8 +270,20 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
-          ) : (
+          ) : (!isSsoEnabled || isBreakGlass || showLocalForm) ? (
             <form onSubmit={handleSubmit} className="space-y-4">
+              {isSsoEnabled && showLocalForm && (
+                <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-100 dark:border-slate-700/60">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">เข้าสู่ระบบด้วยบัญชี Local</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowLocalForm(false)}
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    ← กลับไปใช้ SSO
+                  </button>
+                </div>
+              )}
               {/* Type Switch Tabs */}
               <div className="flex p-1 bg-gray-100 dark:bg-slate-700/50 rounded-xl mb-3">
                 <button
@@ -383,7 +398,7 @@ export default function LoginPage() {
                 </div>
               )}
             </form>
-          )}
+          ) : null}
         </div>
 
         <p className="text-center text-gray-400 dark:text-gray-600 text-xs mt-5 select-none">

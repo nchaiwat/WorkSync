@@ -7,17 +7,21 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './jwt.strategy';
 
+import { PrismaModule } from '../prisma/prisma.module';
 import { SettingsModule } from '../settings/settings.module';
 import { TransactionLogsModule } from '../transaction-logs/transaction-logs.module';
+import { TelegramModule } from '../telegram/telegram.module';
 import { CiamSsoService } from './ciam-sso.service';
 import { CiamSsoController } from './ciam-sso.controller';
 
 @Module({
   imports: [
+    PrismaModule,
     UsersModule,
     ConfigModule,
     SettingsModule,
     TransactionLogsModule,
+    TelegramModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],

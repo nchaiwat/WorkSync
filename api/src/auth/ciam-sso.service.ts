@@ -11,6 +11,8 @@ import { SettingsService } from '../settings/settings.service';
 import { TransactionLogsService } from '../transaction-logs/transaction-logs.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { TelegramService } from '../telegram/telegram.service';
 import { Role } from '@prisma/client';
 
 export interface AuthorizeUrlResponse {
@@ -29,6 +31,8 @@ export class CiamSsoService {
     private readonly transactionLogsService: TransactionLogsService,
     private readonly usersService: UsersService,
     private readonly authService: AuthService,
+    private readonly prisma: PrismaService,
+    private readonly telegramService: TelegramService,
   ) {}
 
   // ─── PKCE Generator (RFC 7636) ──────────────────────────────────────────
@@ -337,6 +341,36 @@ export class CiamSsoService {
       },
       triggeredBy: `user:${adminUsername}`,
     });
+
+    // ISO 27001 Emergency Broadcast to IT Administration Telegram
+    try {
+      const emergencyMessage =
+        `🚨 <b>[WorkSync Emergency Alert]</b>\n` +
+        `สถานะระบบ Break-Glass: <b>${active ? '⚠️ เปิดใช้งาน (ACTIVE)' : '✅ ปิดการใช้งาน (DISABLED)'}</b>\n` +
+        `ดำเนินการโดย: <code>${adminUsername}</code>\n` +
+        `เหตุผล: ${reason || 'Admin Manual Toggle'}\n` +
+        `IP ที่ทำรายการ: <code>${ip}</code>\n` +
+        `เวลา: ${new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`;
+
+      const adminUsers = await this.prisma.user.findMany({
+        where: { role: Role.ADMIN, telegramId: { not: null } },
+        select: { telegramId: true },
+      });
+      const notifyIds = adminUsers
+        .map((a) => a.telegramId?.trim())
+        .filter((id): id is string => Boolean(id));
+
+      const defaultChatId = process.env.TELEGRAM_CHAT_ID;
+      if (defaultChatId && !notifyIds.includes(defaultChatId.trim())) {
+        notifyIds.push(defaultChatId.trim());
+      }
+
+      if (notifyIds.length > 0) {
+        await this.telegramService.broadcastNotification(notifyIds, emergencyMessage);
+      }
+    } catch (err: any) {
+      this.logger.warn(`Could not dispatch Break-Glass telegram alert: ${err.message}`);
+    }
 
     return {
       status: 'success',

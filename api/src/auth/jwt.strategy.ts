@@ -44,6 +44,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user) {
       throw new UnauthorizedException('ผู้ใช้นี้ไม่มีสิทธิ์เข้าถึงระบบ');
     }
+    if (user.status !== 'active') {
+      throw new UnauthorizedException('บัญชีผู้ใช้นี้ถูกระงับสิทธิ์การใช้งาน (Account Deactivated)');
+    }
     // Remove password before returning
     const { password, ...rest } = user;
     return rest;

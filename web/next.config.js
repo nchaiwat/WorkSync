@@ -44,6 +44,14 @@ const nextConfig = {
         source: '/api/auth/:path*',
         destination: `${backendUrl}/auth/:path*`,
       },
+      {
+        source: '/api/v1/:path*',
+        destination: `${backendUrl}/api/v1/:path*`,
+      },
+      {
+        source: '/v1/:path*',
+        destination: `${backendUrl}/v1/:path*`,
+      },
     ];
   },
 

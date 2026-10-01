@@ -102,17 +102,39 @@ export async function getMe(token: string) {
     headers: { Authorization: `Bearer ${token}` },
   });
 
+  if (res.status === 401 && typeof window !== 'undefined') {
+    const isLoginPage = window.location.pathname === '/login';
+    const isAuthCallback = window.location.pathname === '/auth/callback';
+    if (!isLoginPage && !isAuthCallback) {
+      logout();
+    }
+  }
+
   if (!res.ok) throw new Error('Invalid token');
   const data = await res.json();
   return data.data;
 }
 
 export function logout() {
+  const authProvider = typeof window !== 'undefined' ? localStorage.getItem('app_auth_provider') : null;
+  const ciamPortalUrl =
+    (typeof window !== 'undefined' && localStorage.getItem('app_ciam_portal_url')) ||
+    'https://ciam.windowasia.com/portal';
+
   document.cookie = 'directus_token=; path=/; max-age=0';
   document.cookie = 'directus_refresh=; path=/; max-age=0';
   document.cookie = 'directus_username=; path=/; max-age=0';
   document.cookie = 'directus_first_name=; path=/; max-age=0';
-  window.location.href = '/login';
+
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('app_auth_provider');
+  }
+
+  if (authProvider === 'local') {
+    window.location.href = '/login';
+  } else {
+    window.location.href = ciamPortalUrl;
+  }
 }
 
 // ─── Admin Functions ────────────────────────────────────────────────

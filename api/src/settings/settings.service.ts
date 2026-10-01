@@ -6,6 +6,7 @@ export interface CiamConfigResponse {
   ciam_base_url: string;
   ciam_client_id: string;
   ciam_client_secret_masked: string;
+  ciam_m2m_key_masked?: string;
   ciam_sso_enabled: boolean;
   ciam_break_glass_active: boolean;
   ciam_ad_gateway_url: string;
@@ -18,6 +19,7 @@ export class UpdateCiamDto {
   ciam_base_url?: string;
   ciam_client_id?: string;
   ciam_client_secret?: string;
+  ciam_m2m_key?: string;
   ciam_sso_enabled?: boolean;
   ciam_break_glass_active?: boolean;
   ciam_ad_gateway_url?: string;
@@ -99,6 +101,7 @@ export class SettingsService implements OnModuleInit {
     const baseUrl = await this.get('ciam_base_url', 'https://ciam.windowasia.com');
     const clientId = await this.get('ciam_client_id', 'worksync-spoke-client');
     const secret = await this.get('ciam_client_secret', '');
+    const m2mKey = await this.get('ciam_m2m_key', 'sec_worksync_m2m_key_2026');
     const ssoEnabled = await this.getBoolean('ciam_sso_enabled', true);
     const breakGlass = await this.getBoolean('ciam_break_glass_active', false);
     const adGateway = await this.get('ciam_ad_gateway_url', 'http://192.168.12.11:3100');
@@ -112,6 +115,7 @@ export class SettingsService implements OnModuleInit {
       ciam_base_url: baseUrl,
       ciam_client_id: clientId,
       ciam_client_secret_masked: this.maskSecret(secret),
+      ciam_m2m_key_masked: this.maskSecret(m2mKey),
       ciam_sso_enabled: ssoEnabled,
       ciam_break_glass_active: breakGlass,
       ciam_ad_gateway_url: adGateway,
@@ -119,6 +123,10 @@ export class SettingsService implements OnModuleInit {
       ciam_session_ttl_minutes: sessionTtl,
       updated_at: updatedAt,
     };
+  }
+
+  async getM2mKey(): Promise<string> {
+    return await this.get('ciam_m2m_key', 'sec_worksync_m2m_key_2026');
   }
 
   async updateCiamConfig(dto: UpdateCiamDto, adminUsername: string, ip: string) {
@@ -153,6 +161,14 @@ export class SettingsService implements OnModuleInit {
         val: dto.ciam_client_secret,
         dataType: 'encrypted',
         desc: 'รหัสลับเฉพาะของระบบลูก',
+      };
+    }
+
+    if (dto.ciam_m2m_key && !dto.ciam_m2m_key.includes('****')) {
+      fieldMap['ciam_m2m_key'] = {
+        val: dto.ciam_m2m_key,
+        dataType: 'encrypted',
+        desc: 'รหัสผ่าน Management API Key สำหรับ Central IAM M2M Communication',
       };
     }
 
