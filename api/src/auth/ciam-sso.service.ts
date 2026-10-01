@@ -172,14 +172,16 @@ export class CiamSsoService {
 
     // 1. Exchange Code with CIAM Token Endpoint
     const tokenUrl = `${baseUrl}/api/v1/oauth/token`;
-    const tokenPayload = {
+    const tokenPayload: Record<string, string> = {
       grant_type: 'authorization_code',
       code,
-      code_verifier: codeVerifier,
       redirect_uri: redirectUri,
       client_id: clientId,
       client_secret: clientSecret,
     };
+    if (codeVerifier && codeVerifier.trim() !== '') {
+      tokenPayload.code_verifier = codeVerifier.trim();
+    }
 
     let tokenResponse: any;
     try {
@@ -195,7 +197,7 @@ export class CiamSsoService {
         let errMsg = `CIAM Token Exchange failed with status ${res.status}`;
         try {
           const errObj = JSON.parse(resText);
-          errMsg = errObj.error_description || errObj.message || errMsg;
+          errMsg = errObj.error_description || errObj.message || errObj.detail || errMsg;
         } catch {}
         throw new Error(errMsg);
       }

@@ -57,14 +57,14 @@ export class CiamSsoController {
   // ─── B.3 Exchange Code & Issue Session ──────────────────────────────────
   @Post('callback')
   async handleCallback(
-    @Body() body: { code: string; code_verifier: string; redirect_uri: string },
+    @Body() body: { code: string; code_verifier?: string; redirect_uri: string },
     @Req() req: express.Request,
   ) {
-    if (!body?.code || !body?.code_verifier || !body?.redirect_uri) {
-      throw new BadRequestException('ข้อมูล code, code_verifier และ redirect_uri จำเป็นสำหรับการแลกเปลี่ยน Token');
+    if (!body?.code || !body?.redirect_uri) {
+      throw new BadRequestException('ข้อมูล code และ redirect_uri จำเป็นสำหรับการแลกเปลี่ยน Token');
     }
     const ip = this.getClientIp(req);
-    return await this.ciamSsoService.handleCallback(body.code, body.code_verifier, body.redirect_uri, ip);
+    return await this.ciamSsoService.handleCallback(body.code, body.code_verifier || '', body.redirect_uri, ip);
   }
 
   // ─── B.4 Break-Glass Toggle (Security Admin) ───────────────────────────
