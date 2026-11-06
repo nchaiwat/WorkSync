@@ -27,6 +27,21 @@ export class UpdateCiamDto {
   ciam_session_ttl_minutes?: number;
 }
 
+export interface SmtpConfigResponse {
+  smtp_host: string;
+  smtp_port: number;
+  smtp_sender_email: string;
+  smtp_password_masked: string;
+  updated_at?: Date | null;
+}
+
+export class UpdateSmtpDto {
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_sender_email?: string;
+  smtp_password?: string;
+}
+
 
 @Injectable()
 export class SettingsService implements OnModuleInit {
@@ -127,6 +142,94 @@ export class SettingsService implements OnModuleInit {
 
   async getM2mKey(): Promise<string> {
     return await this.get('ciam_m2m_key', 'sec_worksync_m2m_key_2026');
+  }
+
+  async getRawSmtpPassword(): Promise<string> {
+    return await this.get('smtp_password', '');
+  }
+
+  async getSmtpConfig(): Promise<SmtpConfigResponse> {
+    await this.ensureCache();
+    const host = await this.get('smtp_host', 'smtp.gmail.com');
+    const port = await this.getNumber('smtp_port', 587);
+    const sender = await this.get('smtp_sender_email', 'itwindowasia@gmail.com');
+    const pass = await this.getRawSmtpPassword();
+    const entry = this.cache.get('smtp_host') || this.cache.get('smtp_sender_email');
+    return {
+      smtp_host: host,
+      smtp_port: port,
+      smtp_sender_email: sender,
+      smtp_password_masked: pass ? this.maskSecret(pass) : '',
+      updated_at: entry?.updatedAt || new Date(),
+    };
+  }
+
+  async updateSmtpConfig(dto: UpdateSmtpDto, adminUsername = 'system', ip = 'unknown'): Promise<any> {
+    const upserts: any[] = [];
+    const changedFields: string[] = [];
+
+    if (dto.smtp_host !== undefined) {
+      upserts.push(
+        this.prisma.systemSetting.upsert({
+          where: { key: 'smtp_host' },
+          create: { key: 'smtp_host', value: String(dto.smtp_host), category: 'email', dataType: 'string', description: 'SMTP Host Server' },
+          update: { value: String(dto.smtp_host) },
+        }),
+      );
+      changedFields.push('smtp_host');
+    }
+
+    if (dto.smtp_port !== undefined) {
+      upserts.push(
+        this.prisma.systemSetting.upsert({
+          where: { key: 'smtp_port' },
+          create: { key: 'smtp_port', value: String(dto.smtp_port), category: 'email', dataType: 'number', description: 'SMTP Port' },
+          update: { value: String(dto.smtp_port) },
+        }),
+      );
+      changedFields.push('smtp_port');
+    }
+
+    if (dto.smtp_sender_email !== undefined) {
+      upserts.push(
+        this.prisma.systemSetting.upsert({
+          where: { key: 'smtp_sender_email' },
+          create: { key: 'smtp_sender_email', value: String(dto.smtp_sender_email), category: 'email', dataType: 'string', description: 'SMTP Sender Email' },
+          update: { value: String(dto.smtp_sender_email) },
+        }),
+      );
+      changedFields.push('smtp_sender_email');
+    }
+
+    if (dto.smtp_password !== undefined && dto.smtp_password !== '' && !dto.smtp_password.includes('****')) {
+      upserts.push(
+        this.prisma.systemSetting.upsert({
+          where: { key: 'smtp_password' },
+          create: { key: 'smtp_password', value: String(dto.smtp_password), category: 'email', dataType: 'string', description: 'SMTP Password / App Password' },
+          update: { value: String(dto.smtp_password) },
+        }),
+      );
+      changedFields.push('smtp_password');
+    }
+
+    if (upserts.length > 0) {
+      await this.prisma.$transaction(upserts);
+      await this.refreshCache();
+      await this.transactionLogsService.recordLog({
+        category: 'system_setting',
+        action: 'update_smtp_settings',
+        status: 'success',
+        message: 'แก้ไขการตั้งค่าระบบส่งอีเมล SMTP Config',
+        details: { changed_fields: changedFields, ip },
+        triggeredBy: `user:${adminUsername}`,
+      });
+    }
+
+    return {
+      status: 'success',
+      message: 'บันทึกการตั้งค่า SMTP เรียบร้อยแล้ว',
+      changed_fields: changedFields,
+    };
   }
 
   async updateCiamConfig(dto: UpdateCiamDto, adminUsername: string, ip: string) {

@@ -92,6 +92,9 @@ export interface User {
   colleagues?: string[];
   telegram_id?: string;
   is_ad_auth?: boolean;
+  email_digest_enabled?: boolean;
+  email_digest_time?: string;
+  email_digest_types?: string[];
   last_access?: string | null;
   previous_access?: string | null;
   avatar_url?: string | null;

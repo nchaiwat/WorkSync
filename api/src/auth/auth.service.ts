@@ -276,6 +276,9 @@ export class AuthService {
       avatar_url: user.avatarUrl,
       telegram_id: user.telegramId,
       is_ad_auth: (user as any).isAdAuth ?? false,
+      email_digest_enabled: (user as any).emailDigestEnabled ?? false,
+      email_digest_time: (user as any).emailDigestTime ?? '08:30',
+      email_digest_types: (user as any).emailDigestTypes ?? ['my_tasks', 'involved_tasks', 'assigned_by_me'],
       last_access: (user as any).lastAccess ? (user as any).lastAccess.toISOString() : null,
     };
   }

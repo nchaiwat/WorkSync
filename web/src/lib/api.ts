@@ -265,8 +265,9 @@ export async function updateUser(userId: string, data: any): Promise<User> {
 export async function uploadAvatar(userId: string, file: File): Promise<{ avatar_url: string }> {
   const url = `${API_BASE}/users/${userId}/avatar`;
   const authHeaders = getAuthHeaders();
+  const optimizedFile = await compressImage(file, 800, 800, 0.85);
   const formData = new FormData();
-  formData.append('avatar', file);
+  formData.append('avatar', optimizedFile);
 
   const res = await fetch(url, {
     method: 'POST',
@@ -288,8 +289,9 @@ export async function uploadAvatar(userId: string, file: File): Promise<{ avatar
 export async function uploadTaskFile(taskId: string, file: File): Promise<{ url: string; filename: string }> {
   const url = `${API_BASE}/items/tasks/${taskId}/upload`;
   const authHeaders = getAuthHeaders();
+  const optimizedFile = await compressImage(file, 1920, 1920, 0.82);
   const formData = new FormData();
-  formData.append('file', file);
+  formData.append('file', optimizedFile);
 
   const res = await fetch(url, {
     method: 'POST',
@@ -340,6 +342,133 @@ export async function markTaskAsRead(id: string): Promise<void> {
   });
 }
 
+// ─── SMTP Config ───────────────────────────────────────────────────
+
+export interface SmtpConfig {
+  smtp_host: string;
+  smtp_port: number;
+  smtp_sender_email: string;
+  smtp_password_masked: string;
+  smtp_password?: string;
+  updated_at?: string;
+}
+
+export async function getSmtpConfig(): Promise<SmtpConfig> {
+  const url = `${API_BASE}/settings/smtp`;
+  const res = await fetchJSON<{ status: string; settings: SmtpConfig }>(url);
+  return res.settings;
+}
+
+export async function updateSmtpConfig(config: Partial<SmtpConfig>): Promise<void> {
+  const url = `${API_BASE}/settings/smtp`;
+  await fetchJSON(url, {
+    method: 'PUT',
+    body: JSON.stringify(config),
+  });
+}
+
+export async function testSmtp(recipient: string): Promise<{ success: boolean; message: string }> {
+  const url = `${API_BASE}/settings/smtp/test`;
+  return await fetchJSON<{ success: boolean; message: string }>(url, {
+    method: 'POST',
+    body: JSON.stringify({ recipient }),
+  });
+}
+
+// ─── In-App Notifications ──────────────────────────────────────────
+
+export interface InAppNotification {
+  id: string;
+  user_id: string;
+  title: string;
+  message: string;
+  link?: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export async function getNotifications(): Promise<{
+  notifications: InAppNotification[];
+  unread_count: number;
+}> {
+  const url = `${API_BASE}/notifications`;
+  return await fetchJSON(url);
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  const url = `${API_BASE}/notifications/${id}/read`;
+  await fetchJSON(url, { method: 'PATCH' });
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  const url = `${API_BASE}/notifications/read-all`;
+  await fetchJSON(url, { method: 'POST' });
+}
+
+// ─── Client-side Image Compression (HTML5 Canvas) ───────────────────
+
+export async function compressImage(
+  file: File,
+  maxWidth = 1600,
+  maxHeight = 1600,
+  quality = 0.8
+): Promise<File> {
+  if (!file.type.startsWith('image/') || file.type === 'image/svg+xml' || file.type === 'image/gif') {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width > height) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            maxHeight = height;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob || blob.size >= file.size) {
+              resolve(file); // Don't use if compressed is somehow larger
+            } else {
+              const compressedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            }
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      img.onerror = () => resolve(file);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+}
+
 // ─── Export API object ──────────────────────────────────────────────
 
 export const api = {
@@ -366,4 +495,11 @@ export const api = {
   testTelegram,
   toggleTaskLike,
   markTaskAsRead,
+  getSmtpConfig,
+  updateSmtpConfig,
+  testSmtp,
+  getNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  compressImage,
 };

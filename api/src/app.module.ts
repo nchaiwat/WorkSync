@@ -10,6 +10,8 @@ import { LoginLogsModule } from './login-logs/login-logs.module';
 import { SettingsModule } from './settings/settings.module';
 import { TransactionLogsModule } from './transaction-logs/transaction-logs.module';
 import { DirectoryModule } from './directory/directory.module';
+import { EmailModule } from './email/email.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 import { AppController } from './app.controller';
 
@@ -28,6 +30,8 @@ import { AppController } from './app.controller';
     SettingsModule,
     TransactionLogsModule,
     DirectoryModule,
+    EmailModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
 })

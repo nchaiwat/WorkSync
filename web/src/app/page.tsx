@@ -6,6 +6,9 @@ import TeamDashboard from '@/components/TeamDashboard';
 import DashboardView from '@/components/DashboardView';
 import KanbanView from '@/components/KanbanView';
 import CalendarView from '@/components/CalendarView';
+import GanttView from '@/components/GanttView';
+import CommandPalette from '@/components/CommandPalette';
+import NotificationCenter from '@/components/NotificationCenter';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { getAuthToken, getAuthUsername, logout as authLogout, getMe, formatUserDisplayName, admin } from '@/lib/auth';
@@ -19,16 +22,17 @@ export default function Home() {
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  // Tab filter: 'dash' | 'my_tasks' | 'assigned_by_me' | 'involved_tasks'
-  const [filter, setFilter] = useState<'dash' | 'my_tasks' | 'assigned_by_me' | 'involved_tasks'>('dash');
+  // Tab filter: 'dash' | 'my_tasks' | 'assigned_by_me' | 'involved_tasks' | 'roadmap'
+  const [filter, setFilter] = useState<'dash' | 'my_tasks' | 'assigned_by_me' | 'involved_tasks' | 'roadmap'>('dash');
   // View mode for tasks: 'members' | 'kanban' | 'calendar'
   const [viewMode, setViewMode] = useState<'members' | 'kanban' | 'calendar'>('members');
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<string>('all');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = sessionStorage.getItem('worksync_tab_filter');
-      if (saved === 'my_tasks' || saved === 'involved_tasks' || saved === 'assigned_by_me' || saved === 'dash') {
+      if (saved === 'my_tasks' || saved === 'involved_tasks' || saved === 'assigned_by_me' || saved === 'dash' || saved === 'roadmap') {
         setFilter(saved as any);
       }
     }
@@ -59,6 +63,9 @@ export default function Home() {
     telegramId: '',
     department: '',
     password: '',
+    emailDigestEnabled: false,
+    emailDigestTime: '08:30',
+    emailDigestTypes: ['my_tasks', 'involved_tasks', 'assigned_by_me'] as string[],
   });
   const [profileAvatarFile, setProfileAvatarFile] = useState<File | null>(null);
   const [profileAvatarPreview, setProfileAvatarPreview] = useState<string>('');
@@ -76,6 +83,11 @@ export default function Home() {
       telegramId: currentUser.telegram_id || '',
       department: currentUser.department || '',
       password: '',
+      emailDigestEnabled: Boolean(currentUser.email_digest_enabled),
+      emailDigestTime: currentUser.email_digest_time || '08:30',
+      emailDigestTypes: Array.isArray(currentUser.email_digest_types)
+        ? currentUser.email_digest_types
+        : ['my_tasks', 'involved_tasks', 'assigned_by_me'],
     });
     setProfileAvatarFile(null);
     setProfileAvatarPreview(currentUser.avatar_url || '');
@@ -99,6 +111,9 @@ export default function Home() {
         email: profileData.email,
         telegram_id: profileData.telegramId,
         department: profileData.department,
+        email_digest_enabled: profileData.emailDigestEnabled,
+        email_digest_time: profileData.emailDigestTime,
+        email_digest_types: profileData.emailDigestTypes,
       };
       
       if (profileData.password) {
@@ -244,6 +259,9 @@ export default function Home() {
             (t.creator_id === currentUser?.id || isCurrentUserMatch(t.created_by_name, currentUser))
         );
         setTasks(filtered);
+      } else if (filter === 'roadmap') {
+        // Roadmap / Gantt shows all active tasks
+        setTasks(activeTasks);
       } else {
         // "งานที่เกี่ยวข้อง" (Related Tasks): Tasks where currentUser is involved (as manager or collaborator),
         // but NOT the creator and NOT the assignee.
@@ -264,6 +282,34 @@ export default function Home() {
       setIsLoading(false);
     }
   }, [isLoggedIn, currentUser, filter]);
+
+  // Real-time EventSource Stream & Visibility Auto-Refresh
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource('/api/items/tasks/stream');
+      es.onmessage = () => {
+        loadTasks();
+      };
+      es.onerror = () => {
+        // will auto-reconnect
+      };
+    } catch {
+      // ignore
+    }
+
+    const handleFocus = () => {
+      loadTasks();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      es?.close();
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [currentUser, loadTasks]);
 
   const handleExportExcel = () => {
     const headers = [
@@ -512,7 +558,16 @@ export default function Home() {
 
               {/* Mobile Actions */}
               {isLoggedIn && (
-                <div className="flex items-center gap-2 sm:hidden">
+                <div className="flex items-center gap-1.5 sm:hidden">
+                  <button
+                    type="button"
+                    onClick={() => setIsCommandPaletteOpen(true)}
+                    className="w-9 h-9 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-sm flex items-center justify-center cursor-pointer"
+                    title="ค้นหาภารกิจ"
+                  >
+                    🔍
+                  </button>
+                  <NotificationCenter onSelectTaskId={(id) => router.push(`/tasks/${id}`)} />
                   <ThemeToggle />
                   <button
                     onClick={handleExportExcel}
@@ -653,11 +708,36 @@ export default function Home() {
                   <span>👥</span>
                   <span>งานเกี่ยวข้อง</span>
                 </button>
+                <button
+                  onClick={() => {
+                    setFilter('roadmap');
+                    sessionStorage.setItem('worksync_tab_filter', 'roadmap');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                    filter === 'roadmap'
+                      ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-[0_2px_8px_rgba(0,0,0,0.08)] font-bold'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <span>📈</span>
+                  <span>Roadmap</span>
+                </button>
               </div>
 
               {/* Desktop-only elements */}
               {isLoggedIn ? (
-                <div className="hidden sm:flex items-center gap-2.5 ml-2">
+                <div className="hidden sm:flex items-center gap-2 ml-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsCommandPaletteOpen(true)}
+                    className="px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-semibold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+                    title="Quick Search & Command (Ctrl+K / ⌘K)"
+                  >
+                    <span>🔍</span>
+                    <span className="hidden lg:inline text-xs">ค้นหา</span>
+                    <kbd className="hidden lg:inline px-1.5 py-0.2 bg-slate-100 dark:bg-slate-900 rounded text-[10px] font-mono border border-slate-200 dark:border-slate-700 text-slate-400">⌘K</kbd>
+                  </button>
+                  <NotificationCenter onSelectTaskId={(id) => router.push(`/tasks/${id}`)} />
                   <ThemeToggle />
                   <button
                     onClick={handleExportExcel}
@@ -755,7 +835,7 @@ export default function Home() {
 
       {/* Content */}
       <main className="max-w-6xl mx-auto px-4 py-6 pb-24 sm:pb-8">
-        {filter !== 'dash' && !isLoading && (
+        {filter !== 'dash' && filter !== 'roadmap' && !isLoading && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 bg-white/70 dark:bg-[#151D2A]/70 backdrop-blur-md p-2 sm:p-2.5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs">
             {/* View Mode Switcher */}
             <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl">
@@ -824,6 +904,8 @@ export default function Home() {
           </div>
         ) : filter === 'dash' ? (
           <DashboardView tasks={unfilteredTasks} users={users} currentUserName={currentUser?.first_name || currentUser?.username} />
+        ) : filter === 'roadmap' ? (
+          <GanttView tasks={displayedTasks} onSelectTask={(t) => router.push(`/tasks/${t.id}`)} />
         ) : viewMode === 'kanban' ? (
           <KanbanView
             tasks={displayedTasks}
@@ -1138,6 +1220,70 @@ export default function Home() {
                 />
               </div>
 
+              {/* Email Daily Digest Settings */}
+              <div className="p-3.5 bg-blue-50/60 dark:bg-slate-800/90 rounded-xl border border-blue-100 dark:border-slate-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">✉️</span>
+                    <div>
+                      <span className="text-xs font-bold text-gray-900 dark:text-white block">อีเมลสรุปงานประจำวัน (Daily Digest)</span>
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400">ส่งอีเมลสรุปรายการงานในระบบไปยังอีเมลของคุณ</span>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={profileData.emailDigestEnabled}
+                    onChange={(e) => setProfileData({ ...profileData, emailDigestEnabled: e.target.checked })}
+                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                </div>
+
+                {profileData.emailDigestEnabled && (
+                  <div className="pt-2 border-t border-blue-100/80 dark:border-slate-700 space-y-2.5">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        ⏰ เวลาที่ต้องการรับอีเมลสรุปทุกวัน (เวลาไทย)
+                      </label>
+                      <input
+                        type="time"
+                        value={profileData.emailDigestTime}
+                        onChange={(e) => setProfileData({ ...profileData, emailDigestTime: e.target.value })}
+                        className="px-3 py-1 text-xs border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                        📋 หมวดหมู่งานที่ต้องการให้สรุปในอีเมล:
+                      </label>
+                      <div className="space-y-1.5 pl-1">
+                        {[
+                          { key: 'my_tasks', label: '👤 งานของฉัน (My Tasks)' },
+                          { key: 'involved_tasks', label: '👥 งานที่เกี่ยวข้อง / รายงานถึงฉัน' },
+                          { key: 'assigned_by_me', label: '🎯 งานที่ฉันมอบหมายให้คนอื่น' },
+                        ].map((item) => (
+                          <label key={item.key} className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={profileData.emailDigestTypes.includes(item.key)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                const types = checked
+                                  ? [...profileData.emailDigestTypes, item.key]
+                                  : profileData.emailDigestTypes.filter((t) => t !== item.key);
+                                setProfileData({ ...profileData, emailDigestTypes: types });
+                              }}
+                              className="rounded text-blue-600 focus:ring-blue-500"
+                            />
+                            <span>{item.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">รหัสผ่านใหม่ (ปล่อยว่างหากไม่ต้องการเปลี่ยน)</label>
                 <input
@@ -1169,6 +1315,33 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Global Quick Search & Command Palette */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        tasks={unfilteredTasks}
+        users={users}
+        onSelectTask={(t) => router.push(`/tasks/${t.id}`)}
+        onCreateTask={() => router.push('/tasks/new')}
+        onToggleTheme={() => {
+          const isDark = document.documentElement.classList.contains('dark');
+          if (isDark) {
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('worksync_theme', 'light');
+          } else {
+            document.documentElement.classList.add('dark');
+            localStorage.setItem('worksync_theme', 'dark');
+          }
+        }}
+        onSwitchView={(v) => {
+          if (v === 'overview') setFilter('dash');
+          else if (v === 'my') setFilter('my_tasks');
+          else if (v === 'assigned') setFilter('assigned_by_me');
+          else if (v === 'involved') setFilter('involved_tasks');
+        }}
+        onOpenProfile={handleOpenProfileModal}
+      />
     </div>
   );
 }

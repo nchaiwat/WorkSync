@@ -30,12 +30,33 @@ model User {
   isAdAuth    Boolean  @default(false) @map("is_ad_auth") // Use Active Directory authentication
   devices     Json?    @default("[]")
   lastAccess  DateTime? @map("last_access")
+  
+  // Email Digest Settings
+  emailDigestEnabled Boolean   @default(false) @map("email_digest_enabled")
+  emailDigestTime    String?   @default("08:30") @map("email_digest_time")
+  emailDigestTypes   Json?     @default("[\"my_tasks\", \"involved_tasks\", \"assigned_by_me\"]") @map("email_digest_types")
+  lastDigestSentAt   DateTime? @map("last_digest_sent_at")
+
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   likes       TaskLike[]
   reads       TaskRead[]
 
   @@map("users")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String
+  message   String   @db.Text
+  link      String?
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, isRead])
+  @@index([createdAt(sort: Desc)])
+  @@map("notifications")
 }
 
 model Task {

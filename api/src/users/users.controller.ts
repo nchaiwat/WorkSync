@@ -135,6 +135,9 @@ export class UsersController {
     if (body.telegram_id !== undefined) updates.telegramId = body.telegram_id || null;
     if (body.pin_code !== undefined) updates.pinCode = body.pin_code || null;
     if (body.is_ad_auth !== undefined) updates.isAdAuth = body.is_ad_auth === true || body.is_ad_auth === 'true';
+    if (body.email_digest_enabled !== undefined) updates.emailDigestEnabled = body.email_digest_enabled === true || body.email_digest_enabled === 'true';
+    if (body.email_digest_time !== undefined) updates.emailDigestTime = body.email_digest_time || '08:30';
+    if (body.email_digest_types !== undefined) updates.emailDigestTypes = body.email_digest_types;
     if (body.role && currentUser.role === Role.ADMIN) {
       updates.role = (body.role === 'admin' || body.role === 'f9826f7f-a8b9-4fe0-9d61-3047fbc101f0') ? Role.ADMIN : Role.USER;
     }
@@ -153,6 +156,9 @@ export class UsersController {
         position: user.position,
         telegram_id: user.telegramId,
         is_ad_auth: (user as any).isAdAuth ?? false,
+        email_digest_enabled: (user as any).emailDigestEnabled ?? false,
+        email_digest_time: (user as any).emailDigestTime ?? '08:30',
+        email_digest_types: (user as any).emailDigestTypes ?? ['my_tasks', 'involved_tasks', 'assigned_by_me'],
       },
     };
   }

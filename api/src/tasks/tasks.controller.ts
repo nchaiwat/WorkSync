@@ -12,7 +12,10 @@ import {
   ForbiddenException,
   UseInterceptors,
   UploadedFile,
+  Sse,
 } from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { TasksService } from './tasks.service';
 import { UsersService } from '../users/users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -130,6 +133,13 @@ export class TasksController {
         total: formatted.length,
       },
     };
+  }
+
+  @Sse('stream')
+  streamEvents(): Observable<any> {
+    return this.tasksService.getEventStream().pipe(
+      map((evt) => ({ data: JSON.stringify(evt) })),
+    );
   }
 
   @UseGuards(JwtAuthGuard)

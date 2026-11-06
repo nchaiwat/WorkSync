@@ -10,10 +10,13 @@ import {
   ForbiddenException,
   HttpException,
   HttpStatus,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
-import { SettingsService, UpdateCiamDto } from './settings.service';
+import { SettingsService, UpdateCiamDto, UpdateSmtpDto } from './settings.service';
 import { TransactionLogsService } from '../transaction-logs/transaction-logs.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { EmailService } from '../email/email.service';
 import * as express from 'express';
 import { Role } from '@prisma/client';
 
@@ -23,6 +26,8 @@ export class SettingsController {
   constructor(
     private readonly settingsService: SettingsService,
     private readonly transactionLogsService: TransactionLogsService,
+    @Inject(forwardRef(() => EmailService))
+    private readonly emailService: EmailService,
   ) {}
 
   private checkAdmin(req: express.Request) {
@@ -90,5 +95,35 @@ export class SettingsController {
       status: 'success',
       data: logs,
     };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('smtp')
+  async getSmtpSettings(@Req() req: express.Request) {
+    this.checkAdmin(req);
+    const settings = await this.settingsService.getSmtpConfig();
+    return {
+      status: 'success',
+      settings,
+    };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put('smtp')
+  async updateSmtpSettings(@Body() body: UpdateSmtpDto, @Req() req: express.Request) {
+    const user = this.checkAdmin(req);
+    const ip = this.getClientIp(req);
+    return await this.settingsService.updateSmtpConfig(body, user.username || user.name, ip);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('smtp/test')
+  async testSmtpSettings(@Body() body: { recipient: string }, @Req() req: express.Request) {
+    this.checkAdmin(req);
+    if (!body?.recipient) {
+      throw new HttpException('กรุณาระบุอีเมลผู้รับทดสอบ', HttpStatus.BAD_REQUEST);
+    }
+    const result = await this.emailService.testSmtp(body.recipient);
+    return result;
   }
 }

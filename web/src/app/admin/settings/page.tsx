@@ -78,6 +78,21 @@ export default function AdminSettingsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // SMTP Configuration State
+  const [smtpSettings, setSmtpSettings] = useState({
+    smtp_host: 'smtp.gmail.com',
+    smtp_port: 587,
+    smtp_sender_email: 'itwindowasia@gmail.com',
+    smtp_password_masked: '',
+  });
+  const [smtpPassword, setSmtpPassword] = useState('');
+  const [showSmtpPassword, setShowSmtpPassword] = useState(false);
+  const [testRecipient, setTestRecipient] = useState('');
+  const [isTestingSmtp, setIsTestingSmtp] = useState(false);
+  const [isSavingSmtp, setIsSavingSmtp] = useState(false);
+  const [smtpSuccess, setSmtpSuccess] = useState('');
+  const [smtpError, setSmtpError] = useState('');
+
   useEffect(() => {
     checkAdmin();
   }, []);
@@ -120,8 +135,87 @@ export default function AdminSettingsPage() {
       if (logsRes?.data) {
         setLogs(logsRes.data);
       }
+
+      // Load SMTP Settings
+      try {
+        const smtpRes = await admin.getSmtpSettings(token);
+        if (smtpRes?.settings) {
+          setSmtpSettings({
+            smtp_host: smtpRes.settings.smtp_host || 'smtp.gmail.com',
+            smtp_port: smtpRes.settings.smtp_port || 587,
+            smtp_sender_email: smtpRes.settings.smtp_sender_email || 'itwindowasia@gmail.com',
+            smtp_password_masked: smtpRes.settings.smtp_password_masked || '',
+          });
+        }
+      } catch (e) {
+        // partial fail ok
+      }
     } catch (err: any) {
       setError(err.message || 'ไม่สามารถโหลดการตั้งค่าได้');
+    }
+  };
+
+  const handleSaveSmtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const token = getAuthToken();
+    if (!token) return;
+
+    setIsSavingSmtp(true);
+    setSmtpError('');
+    setSmtpSuccess('');
+
+    try {
+      const payload: any = {
+        smtp_host: smtpSettings.smtp_host,
+        smtp_port: Number(smtpSettings.smtp_port),
+        smtp_sender_email: smtpSettings.smtp_sender_email,
+      };
+      if (smtpPassword.trim()) {
+        payload.smtp_password = smtpPassword.trim();
+      }
+
+      await admin.updateSmtpSettings(token, payload);
+      setSmtpSuccess('บันทึกการตั้งค่า SMTP เรียบร้อยแล้ว');
+      const updated = await admin.getSmtpSettings(token);
+      if (updated?.settings) {
+        setSmtpSettings({
+          smtp_host: updated.settings.smtp_host || 'smtp.gmail.com',
+          smtp_port: updated.settings.smtp_port || 587,
+          smtp_sender_email: updated.settings.smtp_sender_email || 'itwindowasia@gmail.com',
+          smtp_password_masked: updated.settings.smtp_password_masked || '',
+        });
+        setSmtpPassword('');
+      }
+    } catch (err: any) {
+      setSmtpError(err.message || 'บันทึกการตั้งค่า SMTP ไม่สำเร็จ');
+    } finally {
+      setIsSavingSmtp(false);
+    }
+  };
+
+  const handleTestSmtp = async () => {
+    if (!testRecipient.trim()) {
+      setSmtpError('กรุณากรอกอีเมลผู้รับทดสอบ');
+      return;
+    }
+    const token = getAuthToken();
+    if (!token) return;
+
+    setIsTestingSmtp(true);
+    setSmtpError('');
+    setSmtpSuccess('');
+
+    try {
+      const res = await admin.testSmtpConnection(token, testRecipient.trim());
+      if (res?.success) {
+        setSmtpSuccess(`ส่งอีเมลทดสอบไปยัง ${testRecipient} สำเร็จ! กรุณาตรวจสอบกล่องจดหมาย`);
+      } else {
+        setSmtpError(res?.message || 'ส่งอีเมลทดสอบไม่สำเร็จ');
+      }
+    } catch (err: any) {
+      setSmtpError(err.message || 'เกิดข้อผิดพลาดในการส่งอีเมลทดสอบ');
+    } finally {
+      setIsTestingSmtp(false);
     }
   };
 
@@ -438,6 +532,140 @@ export default function AdminSettingsPage() {
               <span>{settings.ciam_break_glass_active ? '✅ ปิดโหมดฉุกเฉิน (คืนค่าปกติ)' : '⚠️ เปิดโหมดฉุกเฉิน (Break-Glass)'}</span>
             </button>
           </div>
+        </section>
+
+        {/* 2. ตั้งค่าการส่งอีเมล (SMTP Config) - Strict Screenshot Matching */}
+        <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5 pb-3 border-b border-gray-100 dark:border-slate-700">
+            <div className="flex items-center gap-2">
+              <span className="text-blue-500 text-xl">✉️</span>
+              <h2 className="text-base font-bold text-gray-900 dark:text-white">
+                2. ตั้งค่าการส่งอีเมล (SMTP Config)
+              </h2>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <input
+                type="email"
+                placeholder="อีเมลผู้รับทดสอบ"
+                value={testRecipient}
+                onChange={(e) => setTestRecipient(e.target.value)}
+                className="px-3.5 py-1.5 text-xs border border-gray-200 dark:border-slate-600 rounded-xl bg-gray-50/70 dark:bg-slate-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-56"
+              />
+              <button
+                type="button"
+                onClick={handleTestSmtp}
+                disabled={isTestingSmtp}
+                className="px-4 py-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isTestingSmtp ? (
+                  <>
+                    <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                    กำลังส่ง...
+                  </>
+                ) : (
+                  <>
+                    <span>✉️</span> ทดสอบส่ง Email
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {smtpSuccess && (
+            <div className="mb-4 p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+              <span>✅</span> {smtpSuccess}
+            </div>
+          )}
+
+          {smtpError && (
+            <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-xl text-xs text-red-800 dark:text-red-300 flex items-center gap-2">
+              <span>⚠️</span> {smtpError}
+            </div>
+          )}
+
+          <form onSubmit={handleSaveSmtp} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Row 1: Host & Port */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  SMTP Host
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={smtpSettings.smtp_host}
+                  onChange={(e) => setSmtpSettings({ ...smtpSettings, smtp_host: e.target.value })}
+                  placeholder="smtp.gmail.com"
+                  className="w-full px-3.5 py-2 text-sm border border-gray-200 dark:border-slate-600 rounded-xl bg-gray-50/50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  SMTP Port
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={smtpSettings.smtp_port}
+                  onChange={(e) => setSmtpSettings({ ...smtpSettings, smtp_port: parseInt(e.target.value, 10) || 587 })}
+                  placeholder="587"
+                  className="w-full px-3.5 py-2 text-sm border border-gray-200 dark:border-slate-600 rounded-xl bg-gray-50/50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Row 2: Sender & Password */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Sender Email
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={smtpSettings.smtp_sender_email}
+                  onChange={(e) => setSmtpSettings({ ...smtpSettings, smtp_sender_email: e.target.value })}
+                  placeholder="itwindowasia@gmail.com"
+                  className="w-full px-3.5 py-2 text-sm border border-gray-200 dark:border-slate-600 rounded-xl bg-gray-50/50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    SMTP Password / App Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                    className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    {showSmtpPassword ? '🙈 ซ่อน' : '👁️ แสดง'}
+                  </button>
+                </div>
+                <input
+                  type={showSmtpPassword ? 'text' : 'password'}
+                  value={smtpPassword}
+                  onChange={(e) => setSmtpPassword(e.target.value)}
+                  placeholder={smtpSettings.smtp_password_masked || '••••••••••••••••'}
+                  className="w-full px-3.5 py-2 text-sm border border-gray-200 dark:border-slate-600 rounded-xl bg-gray-50/50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="submit"
+                disabled={isSavingSmtp}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl text-xs font-semibold transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
+              >
+                {isSavingSmtp ? 'กำลังบันทึก...' : '💾 บันทึกการตั้งค่า SMTP'}
+              </button>
+            </div>
+          </form>
         </section>
 
         {/* 3. Settings Form (Zero .env) */}

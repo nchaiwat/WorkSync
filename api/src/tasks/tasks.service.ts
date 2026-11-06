@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Task } from '@prisma/client';
 import { TelegramService } from '../telegram/telegram.service';
 import { UsersService } from '../users/users.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { Subject, Observable } from 'rxjs';
 
 const STATUS_LABELS: Record<string, string> = {
   todo: '📋 รอดำเนินการ',
@@ -30,11 +32,22 @@ function notifyHeader(): string {
 
 @Injectable()
 export class TasksService implements OnModuleInit {
+  private readonly events$ = new Subject<{ type: string; data?: any }>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly telegramService: TelegramService,
     private readonly usersService: UsersService,
+    private readonly notificationsService: NotificationsService,
   ) {}
+
+  emitTaskEvent(type: string, data?: any) {
+    this.events$.next({ type, data });
+  }
+
+  getEventStream(): Observable<{ type: string; data?: any }> {
+    return this.events$.asObservable();
+  }
 
   onModuleInit() {
     // Run reminder check every 30 minutes
@@ -372,6 +385,7 @@ export class TasksService implements OnModuleInit {
       }
     })();
 
+    this.emitTaskEvent('TASK_CREATED', { id: task.id });
     return task;
   }
 
@@ -606,6 +620,16 @@ export class TasksService implements OnModuleInit {
       }
     }
 
+    if (data.latest_update) {
+      this.notificationsService.scanAndNotifyMentions(
+        data.latest_update,
+        updaterName || 'เพื่อนร่วมงาน',
+        task.id,
+        task.title,
+      ).catch(() => {});
+    }
+
+    this.emitTaskEvent('TASK_UPDATED', { id: task.id });
     return task;
   }
 
@@ -677,5 +701,6 @@ export class TasksService implements OnModuleInit {
   async remove(id: string): Promise<void> {
     await this.findOne(id);
     await this.prisma.task.delete({ where: { id } });
+    this.emitTaskEvent('TASK_DELETED', { id });
   }
 }

@@ -10,10 +10,16 @@ import {
 } from '@nestjs/common';
 import { CommentsService } from './comments.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { NotificationsService } from '../notifications/notifications.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('items/task_comments')
 export class CommentsController {
-  constructor(private readonly commentsService: CommentsService) {}
+  constructor(
+    private readonly commentsService: CommentsService,
+    private readonly notificationsService: NotificationsService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Get()
   async findAll(@Query() query: any) {
@@ -42,6 +48,34 @@ export class CommentsController {
       message: body.message,
       updateKey: body.update_key,
     });
+
+    if (body.message && body.task) {
+      try {
+        const task = await this.prisma.task.findUnique({
+          where: { id: body.task },
+          select: { title: true },
+        });
+        let senderName = 'เพื่อนร่วมงาน';
+        if (body.user) {
+          const sender = await this.prisma.user.findUnique({
+            where: { id: body.user },
+            select: { firstName: true, nickname: true, username: true },
+          });
+          if (sender) {
+            senderName = sender.nickname || sender.firstName || sender.username;
+          }
+        }
+        this.notificationsService.scanAndNotifyMentions(
+          body.message,
+          senderName,
+          body.task,
+          task?.title || 'ภารกิจ',
+        ).catch(() => {});
+      } catch (err) {
+        // ignore notification error
+      }
+    }
+
     const formatted = {
       id: c.id,
       task: c.task,

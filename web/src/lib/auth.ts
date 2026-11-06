@@ -254,6 +254,48 @@ export const admin = {
     return await res.json();
   },
 
+  async getSmtpSettings(token: string) {
+    const res = await fetch(`${API_BASE}/settings/smtp`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      throw new Error('ไม่สามารถดึงข้อมูลการตั้งค่า SMTP ได้');
+    }
+    return await res.json();
+  },
+
+  async updateSmtpSettings(token: string, settings: any) {
+    const res = await fetch(`${API_BASE}/settings/smtp`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(settings),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'บันทึกการตั้งค่า SMTP ไม่สำเร็จ');
+    }
+    return await res.json();
+  },
+
+  async testSmtpConnection(token: string, recipient: string) {
+    const res = await fetch(`${API_BASE}/settings/smtp/test`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ recipient }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.message || 'ส่งอีเมลทดสอบไม่สำเร็จ');
+    }
+    return data;
+  },
+
   async toggleBreakGlass(token: string, breakGlassActive: boolean, reason: string) {
     const res = await fetch(`${API_BASE}/auth/sso/break-glass-toggle`, {
       method: 'POST',

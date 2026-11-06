@@ -5,6 +5,7 @@ import type { Task, User, TaskComment, Subtask, TaskActivity } from '@/types';
 import { STATUS_CONFIG } from '@/types';
 import { api } from '@/lib/api';
 import { formatUserDisplayName } from '@/lib/auth';
+import { triggerConfetti, triggerHaptic } from '@/lib/effects';
 import CommentSection from './CommentSection';
 import UserDisplay from './UserDisplay';
 
@@ -297,6 +298,11 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
         project_owner: editProjectOwner || undefined,
         recurrence: editRecurrence,
       });
+      if (editProgress === 100 || editStatus === 'done') {
+        triggerConfetti();
+      } else {
+        triggerHaptic(20);
+      }
       onUpdate(updated);
       setIsEditing(false);
     } catch (err: unknown) {
@@ -324,6 +330,11 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
         progress: suggestedProgress,
         status: suggestedProgress === 100 ? 'done' : task.status === 'done' && suggestedProgress < 100 ? 'in_progress' : task.status,
       });
+      if (suggestedProgress === 100) {
+        triggerConfetti();
+      } else {
+        triggerHaptic(15);
+      }
       onUpdate(updated);
     } catch (err: any) {
       alert('อัปเดตงานย่อยไม่สำเร็จ: ' + (err?.message || err));
