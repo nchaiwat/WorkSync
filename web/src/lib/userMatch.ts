@@ -54,7 +54,18 @@ export function isCurrentUserMatch(taskField: string | null | undefined, current
   if (currentUser.id && tf === currentUser.id) return true;
 
   const formattedName = formatUserDisplayName(currentUser);
+  if (tf === formattedName) return true;
   if (isSamePerson(tf, formattedName)) return true;
+
+  // Robust direct substring and equality fallbacks
+  const tfLower = tf.toLowerCase();
+  const fnLower = (currentUser.first_name || '').toLowerCase();
+  const unLower = (currentUser.username || '').toLowerCase();
+  const nnLower = (currentUser.nickname || '').toLowerCase();
+
+  if (fnLower && (tfLower === fnLower || tfLower.includes(`(${fnLower})`) || tfLower.includes(fnLower))) return true;
+  if (unLower && (tfLower === unLower || tfLower.includes(`(${unLower})`) || tfLower.includes(unLower))) return true;
+  if (nnLower && (tfLower === nnLower || tfLower.includes(nnLower))) return true;
 
   if (currentUser.first_name && isSamePerson(tf, currentUser.first_name)) return true;
   if (currentUser.username && isSamePerson(tf, currentUser.username)) return true;
