@@ -31,6 +31,7 @@ export default function NewTaskPage() {
     deadline: '',
     colleagues: [] as string[],
     project_owner: '',
+    recurrence: 'none' as 'none' | 'daily' | 'weekly' | 'monthly',
   });
 
   useEffect(() => {
@@ -239,6 +240,7 @@ export default function NewTaskPage() {
         collaborators: formattedColleagues,
         avatar_url: '',
         project_owner: formData.project_owner || null,
+        recurrence: formData.recurrence,
       });
 
       router.push('/');
@@ -619,6 +621,26 @@ export default function NewTaskPage() {
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 text-transparent shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
                 />
               </div>
+            </div>
+
+            {/* Recurrence */}
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                🔁 ทำซ้ำอัตโนมัติ (Recurring Task)
+              </label>
+              <select
+                value={formData.recurrence}
+                onChange={e => setFormData(prev => ({ ...prev, recurrence: e.target.value as any }))}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#007AFF] text-sm"
+              >
+                <option value="none">ไม่ทำซ้ำ (งานครั้งเดียว)</option>
+                <option value="daily">ทุกวัน (Daily - สร้างรอบถัดไป +1 วัน เมื่อเสร็จ)</option>
+                <option value="weekly">ทุกสัปดาห์ (Weekly - สร้างรอบถัดไป +7 วัน เมื่อเสร็จ)</option>
+                <option value="monthly">ทุกเดือน (Monthly - สร้างรอบถัดไป +1 เดือน เมื่อเสร็จ)</option>
+              </select>
+              <p className="text-[11px] text-slate-400 mt-1">
+                เมื่องานนี้ถูกทำจนครบ 100% (Done) ระบบจะโคลนและสร้างรอบถัดไปให้อัตโนมัติทันที
+              </p>
             </div>
           </div>
 

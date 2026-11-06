@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Task } from '@prisma/client';
 import { TelegramService } from '../telegram/telegram.service';
@@ -29,12 +29,114 @@ function notifyHeader(): string {
 }
 
 @Injectable()
-export class TasksService {
+export class TasksService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly telegramService: TelegramService,
     private readonly usersService: UsersService,
   ) {}
+
+  onModuleInit() {
+    // Run reminder check every 30 minutes
+    const THIRTY_MINUTES = 30 * 60 * 1000;
+    setTimeout(() => {
+      this.checkAndSendDeadlineReminders().catch(console.error);
+      setInterval(() => {
+        this.checkAndSendDeadlineReminders().catch(console.error);
+      }, THIRTY_MINUTES);
+    }, 60000);
+  }
+
+  /**
+   * Log an activity item to the task timeline
+   */
+  async logActivity(taskId: string, userName: string, action: string, details: string): Promise<void> {
+    try {
+      await this.prisma.taskActivity.create({
+        data: {
+          taskId,
+          userName: userName || 'System',
+          action,
+          details,
+        },
+      });
+    } catch (err: any) {
+      console.error(`Failed to log task activity: ${err.message}`);
+    }
+  }
+
+  /**
+   * Checks tasks due within 24 hours and sends a Telegram reminder to the assignee
+   */
+  async checkAndSendDeadlineReminders(): Promise<void> {
+    try {
+      const now = new Date();
+      const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const twentyHoursAgo = new Date(now.getTime() - 20 * 60 * 60 * 1000);
+
+      const urgentTasks = await this.prisma.task.findMany({
+        where: {
+          isArchived: false,
+          status: { not: 'done' },
+          deadline: {
+            not: null,
+            lte: in24Hours,
+          },
+          OR: [
+            { lastReminderSentAt: null },
+            { lastReminderSentAt: { lte: twentyHoursAgo } },
+          ],
+        },
+      });
+
+      for (const task of urgentTasks) {
+        if (!task.deadline) continue;
+        const assigneeIds = await this.resolveTelegramIds([task.assignee]);
+        if (assigneeIds.length === 0) continue;
+
+        const isToday = task.deadline.toDateString() === now.toDateString();
+        const isPastDue = task.deadline.getTime() < now.getTime();
+        const timingText = isPastDue
+          ? '⚠️ <b>ภารกิจนี้เกินกำหนดส่งแล้ว!</b>'
+          : isToday
+          ? '⏰ <b>ภารกิจนี้ครบกำหนดส่งในวันนี้!</b>'
+          : '⏰ <b>ภารกิจนี้ใกล้ถึงกำหนดส่ง (พรุ่งนี้)!</b>';
+
+        const deadlineStr = task.deadline.toLocaleDateString('th-TH', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          timeZone: 'Asia/Bangkok',
+        });
+
+        const reminderMsg =
+          `${notifyHeader()}\n` +
+          `${timingText}\n\n` +
+          `📌 <b>หัวข้อ:</b> ${task.title}\n` +
+          `👤 <b>ผู้รับผิดชอบ:</b> ${task.assignee}\n` +
+          `📊 <b>Progress:</b> ${task.progress}%\n` +
+          `📅 <b>กำหนดส่ง:</b> ${deadlineStr}\n` +
+          `⚙️ <b>สถานะ:</b> ${STATUS_LABELS[task.status] || task.status}\n\n` +
+          `👉 กรุณาเข้าสู่ระบบ WorkSync เพื่ออัปเดตความคืบหน้าของงานครับ`;
+
+        await this.telegramService.broadcastNotification(assigneeIds, reminderMsg);
+
+        await this.prisma.task.update({
+          where: { id: task.id },
+          data: { lastReminderSentAt: new Date() },
+        });
+
+        await this.logActivity(
+          task.id,
+          'WorkSync Bot',
+          'reminder',
+          `ส่งการแจ้งเตือนเตือนกำหนดส่งไปยัง Telegram ของ ${task.assignee}`,
+        );
+      }
+    } catch (err: any) {
+      console.error(`Error in checkAndSendDeadlineReminders: ${err.message}`);
+    }
+  }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -156,9 +258,21 @@ export class TasksService {
         assignee: data.assignee,
         manager: data.manager,
         projectOwner: data.project_owner || null,
+        subtasks: data.subtasks || [],
+        recurrence: data.recurrence || 'none',
         previousProgress: 0,
       },
     });
+
+    // ── Activity Log ──
+    const creatorUser = task.createdBy
+      ? await this.usersService.findOneById(task.createdBy).catch(() => null)
+      : null;
+    const creatorDisplayName = creatorUser
+      ? (creatorUser.nickname ? `${creatorUser.nickname} (${creatorUser.firstName})` : creatorUser.firstName)
+      : (task.assignee || 'ผู้สร้างงาน');
+
+    await this.logActivity(task.id, creatorDisplayName, 'created', 'สร้างภารกิจใหม่');
 
     // ── Smart Telegram Notification (Assignee / Manager / Collaborators) ──
     (async () => {
@@ -291,6 +405,10 @@ export class TasksService {
           include: {
             user: true
           }
+        },
+        activities: {
+          orderBy: { createdAt: 'desc' },
+          take: 50,
         }
       }
     });
@@ -298,7 +416,7 @@ export class TasksService {
     return task;
   }
 
-  async update(id: string, data: any): Promise<Task> {
+  async update(id: string, data: any, updaterName?: string): Promise<Task> {
     const oldTask = await this.findOne(id);
 
     const updateData: any = {};
@@ -322,8 +440,97 @@ export class TasksService {
     if (data.project_owner !== undefined) updateData.projectOwner = data.project_owner;
     if (data.isArchived !== undefined) updateData.isArchived = data.isArchived;
     if (data.archiveReason !== undefined) updateData.archiveReason = data.archiveReason;
+    if (data.subtasks !== undefined) updateData.subtasks = data.subtasks;
+    if (data.recurrence !== undefined) updateData.recurrence = data.recurrence;
 
     const task = await this.prisma.task.update({ where: { id }, data: updateData });
+
+    // ── Log Activity Timeline ──
+    const actor = updaterName || task.assignee || 'ผู้ใช้งาน';
+    const statusChanged = data.status !== undefined && data.status !== oldTask.status;
+    const progressChanged = data.progress !== undefined && Number(data.progress) !== oldTask.progress;
+    const latestUpdateChanged = data.latest_update !== undefined && data.latest_update !== oldTask.latestUpdate;
+    const subtasksChanged = data.subtasks !== undefined;
+
+    if (statusChanged) {
+      await this.logActivity(task.id, actor, 'status_change', `เปลี่ยนสถานะเป็น ${STATUS_LABELS[task.status] || task.status}`);
+    }
+    if (progressChanged) {
+      await this.logActivity(task.id, actor, 'progress_change', `ปรับความคืบหน้าเป็น ${task.progress}%`);
+    }
+    if (latestUpdateChanged) {
+      await this.logActivity(task.id, actor, 'update_log', 'บันทึกอัปเดตความคืบหน้า');
+    }
+    if (subtasksChanged) {
+      await this.logActivity(task.id, actor, 'subtask_toggle', 'อัปเดตรายการงานย่อย (Checklist)');
+    }
+    if (data.deadline !== undefined) {
+      const dStr = task.deadline ? task.deadline.toLocaleDateString('th-TH') : 'ไม่ระบุ';
+      await this.logActivity(task.id, actor, 'deadline_change', `เปลี่ยนกำหนดส่งเป็น ${dStr}`);
+    }
+
+    // ── Handle Recurring Tasks Auto-generation ──
+    const becameDone = statusChanged && task.status === 'done';
+    if (becameDone && task.recurrence && task.recurrence !== 'none') {
+      const nextDeadline = (() => {
+        const baseDate = task.deadline ? new Date(task.deadline) : new Date();
+        const next = new Date(baseDate);
+        if (task.recurrence === 'daily') {
+          next.setDate(next.getDate() + 1);
+        } else if (task.recurrence === 'weekly') {
+          next.setDate(next.getDate() + 7);
+        } else if (task.recurrence === 'monthly') {
+          next.setMonth(next.getMonth() + 1);
+        }
+        return next;
+      })();
+
+      // Reset subtasks for next cycle
+      let resetSubtasks: any[] = [];
+      if (task.subtasks) {
+        try {
+          const raw = Array.isArray(task.subtasks) ? task.subtasks : JSON.parse(task.subtasks as string);
+          resetSubtasks = raw.map((s: any) => ({ ...s, completed: false }));
+        } catch {
+          resetSubtasks = [];
+        }
+      }
+
+      const nextTask = await this.prisma.task.create({
+        data: {
+          title: task.title,
+          description: task.description,
+          status: 'todo',
+          priority: task.priority,
+          progress: 0,
+          previousProgress: 0,
+          deadline: nextDeadline,
+          avatarUrl: task.avatarUrl,
+          collaborators: task.collaborators || [],
+          createdBy: task.createdBy,
+          assignee: task.assignee,
+          manager: task.manager,
+          projectOwner: task.projectOwner,
+          recurrence: task.recurrence,
+          subtasks: resetSubtasks,
+        },
+      });
+
+      const recurrenceLabel = task.recurrence === 'daily' ? 'รายวัน' : task.recurrence === 'weekly' ? 'รายสัปดาห์' : 'รายเดือน';
+      await this.logActivity(
+        task.id,
+        'WorkSync Bot',
+        'recurrence',
+        `สร้างภารกิจรอบถัดไป (${recurrenceLabel}) สำเร็จ`,
+      );
+
+      await this.logActivity(
+        nextTask.id,
+        'WorkSync Bot',
+        'created',
+        `สร้างอัตโนมัติตามรอบ (${recurrenceLabel}) กำหนดส่ง ${nextDeadline.toLocaleDateString('th-TH')}`,
+      );
+    }
 
     // ── Notify on Archive or normal changes ──
     const archivedChanged = data.isArchived !== undefined && data.isArchived !== oldTask.isArchived;

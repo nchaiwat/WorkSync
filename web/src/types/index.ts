@@ -30,6 +30,24 @@ export interface Task {
   }[];
   is_unread?: boolean;
   last_read_at?: string | null;
+  subtasks?: Subtask[];
+  recurrence?: 'none' | 'daily' | 'weekly' | 'monthly';
+  activities?: TaskActivity[];
+}
+
+export interface Subtask {
+  id: string;
+  title: string;
+  completed: boolean;
+  created_at?: string;
+}
+
+export interface TaskActivity {
+  id: string;
+  user_name: string;
+  action: string;
+  details: string;
+  created_at: string;
 }
 
 export interface TaskComment {

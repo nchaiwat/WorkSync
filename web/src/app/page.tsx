@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import TeamDashboard from '@/components/TeamDashboard';
 import DashboardView from '@/components/DashboardView';
+import KanbanView from '@/components/KanbanView';
+import CalendarView from '@/components/CalendarView';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { getAuthToken, getAuthUsername, logout as authLogout, getMe, formatUserDisplayName, admin } from '@/lib/auth';
@@ -19,6 +21,9 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   // Tab filter: 'dash' | 'my_tasks' | 'assigned_by_me' | 'involved_tasks'
   const [filter, setFilter] = useState<'dash' | 'my_tasks' | 'assigned_by_me' | 'involved_tasks'>('dash');
+  // View mode for tasks: 'members' | 'kanban' | 'calendar'
+  const [viewMode, setViewMode] = useState<'members' | 'kanban' | 'calendar'>('members');
+  const [selectedProject, setSelectedProject] = useState<string>('all');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -421,9 +426,35 @@ export default function Home() {
     }
   };
 
+  const projectOwners = useMemo(() => {
+    const set = new Set<string>();
+    tasks.forEach(t => {
+      if (t.project_owner && t.project_owner.trim()) {
+        set.add(t.project_owner.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [tasks]);
+
+  const displayedTasks = useMemo(() => {
+    if (selectedProject === 'all') return tasks;
+    return tasks.filter(t => (t.project_owner || '').trim() === selectedProject);
+  }, [tasks, selectedProject]);
+
+  const handleStatusChange = async (taskId: string, newStatus: 'todo' | 'in_progress' | 'review' | 'done') => {
+    try {
+      const target = tasks.find(t => t.id === taskId);
+      const newProgress = newStatus === 'done' ? 100 : target && target.progress === 100 ? 50 : target?.progress || 0;
+      await api.updateTask(taskId, { status: newStatus, progress: newProgress });
+      await loadTasks();
+    } catch (err: any) {
+      alert('เปลี่ยนสถานะไม่สำเร็จ: ' + (err?.message || err));
+    }
+  };
+
   const members = useMemo((): TeamMember[] => {
     const memberMap = new Map<string, Task[]>();
-    for (const task of tasks) {
+    for (const task of displayedTasks) {
       // In "Assigned by Me" mode, group columns by the assignee (each team member doing the delegated tasks)
       const groupKey = filter === 'assigned_by_me'
         ? (task.assignee || 'ไม่ระบุผู้รับผิดชอบ')
@@ -457,7 +488,7 @@ export default function Home() {
         last_update: latestTime || undefined,
       };
     });
-  }, [tasks, users]);
+  }, [displayedTasks, users, filter]);
 
   return (
     <div className="min-h-screen bg-[#F2F2F7] dark:bg-[#0B0F19] text-slate-900 dark:text-slate-100 transition-colors">
@@ -723,7 +754,68 @@ export default function Home() {
 
 
       {/* Content */}
-      <main className="max-w-5xl mx-auto px-4 py-6 pb-24 sm:pb-8">
+      <main className="max-w-6xl mx-auto px-4 py-6 pb-24 sm:pb-8">
+        {filter !== 'dash' && !isLoading && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 bg-white/70 dark:bg-[#151D2A]/70 backdrop-blur-md p-2 sm:p-2.5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs">
+            {/* View Mode Switcher */}
+            <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setViewMode('members')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  viewMode === 'members'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs font-bold'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+              >
+                <span>👥</span>
+                <span>รายบุคคล</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('kanban')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  viewMode === 'kanban'
+                    ? 'bg-white dark:bg-slate-700 text-[#007AFF] dark:text-blue-400 shadow-xs font-bold'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+              >
+                <span>📌</span>
+                <span>Kanban</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('calendar')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  viewMode === 'calendar'
+                    ? 'bg-white dark:bg-slate-700 text-[#5856D6] dark:text-purple-400 shadow-xs font-bold'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+              >
+                <span>📅</span>
+                <span>ปฏิทิน</span>
+              </button>
+            </div>
+
+            {/* Project Filter */}
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <span className="text-xs text-slate-400 font-medium hidden sm:inline">โครงการ:</span>
+              <select
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#007AFF] shadow-xs"
+              >
+                <option value="all">📂 ทุกโครงการ ({tasks.length})</option>
+                {projectOwners.map((p) => (
+                  <option key={p} value={p}>
+                    📂 {p} ({tasks.filter(t => (t.project_owner || '').trim() === p).length})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-pulse">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -732,6 +824,15 @@ export default function Home() {
           </div>
         ) : filter === 'dash' ? (
           <DashboardView tasks={unfilteredTasks} users={users} currentUserName={currentUser?.first_name || currentUser?.username} />
+        ) : viewMode === 'kanban' ? (
+          <KanbanView
+            tasks={displayedTasks}
+            onStatusChange={handleStatusChange}
+            currentUserName={userName}
+            users={users}
+          />
+        ) : viewMode === 'calendar' ? (
+          <CalendarView tasks={displayedTasks} />
         ) : (
           <TeamDashboard members={members} loading={isLoading} filterMode={filter} isMyTasks={filter === 'my_tasks'} />
         )}

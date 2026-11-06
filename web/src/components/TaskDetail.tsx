@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import type { Task, User, TaskComment } from '@/types';
+import type { Task, User, TaskComment, Subtask, TaskActivity } from '@/types';
 import { STATUS_CONFIG } from '@/types';
 import { api } from '@/lib/api';
 import { formatUserDisplayName } from '@/lib/auth';
@@ -98,6 +98,9 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
   const [editManager, setEditManager] = useState(task.manager || '');
   const [editCollaborators, setEditCollaborators] = useState<string[]>(task.collaborators || []);
   const [editProjectOwner, setEditProjectOwner] = useState(task.project_owner || '');
+  const [editRecurrence, setEditRecurrence] = useState<'none' | 'daily' | 'weekly' | 'monthly'>(task.recurrence || 'none');
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [isSubmittingSubtask, setIsSubmittingSubtask] = useState(false);
   const [newUpdateText, setNewUpdateText] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
@@ -199,6 +202,7 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
       setEditProgress(task.progress);
       setEditStatus(task.status);
       setEditProjectOwner(task.project_owner || '');
+      setEditRecurrence(task.recurrence || 'none');
 
       // Resolve manager
       const mgrUser = users.find(u => 
@@ -291,6 +295,7 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
         manager: formattedManager || null,
         collaborators: formattedColleagues,
         project_owner: editProjectOwner || undefined,
+        recurrence: editRecurrence,
       });
       onUpdate(updated);
       setIsEditing(false);
@@ -299,6 +304,68 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
       setError(message);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleToggleSubtask = async (subtaskId: string) => {
+    const currentSubtasks: Subtask[] = (task.subtasks || []);
+    const updatedSubtasks = currentSubtasks.map(s =>
+      s.id === subtaskId ? { ...s, completed: !s.completed } : s
+    );
+
+    const completedCount = updatedSubtasks.filter(s => s.completed).length;
+    const suggestedProgress = updatedSubtasks.length > 0
+      ? Math.round((completedCount / updatedSubtasks.length) * 100)
+      : task.progress;
+
+    try {
+      const updated = await api.updateTask(task.id, {
+        subtasks: updatedSubtasks,
+        progress: suggestedProgress,
+        status: suggestedProgress === 100 ? 'done' : task.status === 'done' && suggestedProgress < 100 ? 'in_progress' : task.status,
+      });
+      onUpdate(updated);
+    } catch (err: any) {
+      alert('อัปเดตงานย่อยไม่สำเร็จ: ' + (err?.message || err));
+    }
+  };
+
+  const handleAddSubtask = async () => {
+    if (!newSubtaskTitle.trim()) return;
+    setIsSubmittingSubtask(true);
+    const currentSubtasks: Subtask[] = (task.subtasks || []);
+    const newSubtask: Subtask = {
+      id: 'st-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+      title: newSubtaskTitle.trim(),
+      completed: false,
+      created_at: new Date().toISOString(),
+    };
+    const updatedSubtasks = [...currentSubtasks, newSubtask];
+
+    try {
+      const updated = await api.updateTask(task.id, {
+        subtasks: updatedSubtasks,
+      });
+      onUpdate(updated);
+      setNewSubtaskTitle('');
+    } catch (err: any) {
+      alert('เพิ่มงานย่อยไม่สำเร็จ: ' + (err?.message || err));
+    } finally {
+      setIsSubmittingSubtask(false);
+    }
+  };
+
+  const handleDeleteSubtask = async (subtaskId: string) => {
+    const currentSubtasks: Subtask[] = (task.subtasks || []);
+    const updatedSubtasks = currentSubtasks.filter(s => s.id !== subtaskId);
+
+    try {
+      const updated = await api.updateTask(task.id, {
+        subtasks: updatedSubtasks,
+      });
+      onUpdate(updated);
+    } catch (err: any) {
+      alert('ลบงานย่อยไม่สำเร็จ: ' + (err?.message || err));
     }
   };
 
@@ -750,6 +817,37 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
             </div>
           </div>
 
+          {/* Project Owner */}
+          <div>
+            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
+              Project Owner / โครงการ
+            </label>
+            <input
+              type="text"
+              value={editProjectOwner}
+              onChange={(e) => setEditProjectOwner(e.target.value)}
+              placeholder="เช่น IT Core, HR System, Sales Campaign"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:outline-none text-sm"
+            />
+          </div>
+
+          {/* Recurrence */}
+          <div>
+            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
+              🔁 ทำซ้ำอัตโนมัติ (Recurring Task)
+            </label>
+            <select
+              value={editRecurrence}
+              onChange={(e) => setEditRecurrence(e.target.value as any)}
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:outline-none text-sm"
+            >
+              <option value="none">ไม่ทำซ้ำ (ครั้งเดียว)</option>
+              <option value="daily">ทุกวัน (Daily - สร้างรอบถัดไป +1 วัน เมื่อเสร็จ)</option>
+              <option value="weekly">ทุกสัปดาห์ (Weekly - สร้างรอบถัดไป +7 วัน เมื่อเสร็จ)</option>
+              <option value="monthly">ทุกเดือน (Monthly - สร้างรอบถัดไป +1 เดือน เมื่อเสร็จ)</option>
+            </select>
+          </div>
+
           <div className="flex gap-2 pt-2">
             <button
               onClick={handleSave}
@@ -804,6 +902,24 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
             <div className="text-right">
               <span className="text-sm font-bold text-indigo-650 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20 px-2 py-0.5 rounded-lg border border-indigo-100/65 dark:border-indigo-900/40 inline-block shadow-sm">
                 📂 {task.project_owner || '—'}
+              </span>
+            </div>
+          </div>
+
+          {/* Recurrence */}
+          <div className="flex items-center justify-between py-2 border-b border-slate-200/60 dark:border-slate-700/60">
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex-shrink-0">
+              ทำซ้ำ (Recurrence)
+            </span>
+            <div className="text-right">
+              <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                task.recurrence && task.recurrence !== 'none'
+                  ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+                  : 'text-gray-400 dark:text-gray-500'
+              }`}>
+                {task.recurrence === 'daily' ? '🔁 ทุกวัน (Daily)' :
+                 task.recurrence === 'weekly' ? '🔁 ทุกสัปดาห์ (Weekly)' :
+                 task.recurrence === 'monthly' ? '🔁 ทุกเดือน (Monthly)' : '— ไม่มี (ครั้งเดียว)'}
               </span>
             </div>
           </div>
@@ -865,7 +981,96 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
         </div>
       </div>
 
+      {/* Subtasks / Checklist Section */}
+      <div className="p-4 sm:p-6 border-b-2 border-slate-200 dark:border-slate-750 bg-slate-50/70 dark:bg-slate-900/40">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-base">☑️</span>
+            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
+              Checklist / รายการงานย่อย (Subtasks)
+            </h3>
+            {task.subtasks && task.subtasks.length > 0 && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-950 text-primary-700 dark:text-primary-300 font-semibold">
+                {task.subtasks.filter(s => s.completed).length}/{task.subtasks.length}
+              </span>
+            )}
+          </div>
+          {task.subtasks && task.subtasks.length > 0 && (
+            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              {Math.round((task.subtasks.filter(s => s.completed).length / task.subtasks.length) * 100)}% สำเร็จ
+            </span>
+          )}
+        </div>
 
+        {/* Subtask list */}
+        <div className="space-y-2 mb-3">
+          {(task.subtasks || []).map((subtask) => (
+            <div
+              key={subtask.id}
+              className={`flex items-center justify-between p-2.5 rounded-xl border transition-all ${
+                subtask.completed
+                  ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40 text-gray-500 dark:text-gray-400'
+                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-gray-900 dark:text-gray-100 shadow-sm'
+              }`}
+            >
+              <label className="flex items-center gap-2.5 flex-1 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={subtask.completed}
+                  onChange={() => handleToggleSubtask(subtask.id)}
+                  disabled={!canEdit && !isCurrentUserInvolved}
+                  className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-slate-600 cursor-pointer"
+                />
+                <span className={`text-sm ${subtask.completed ? 'line-through text-gray-400 dark:text-gray-500' : 'font-medium'}`}>
+                  {subtask.title}
+                </span>
+              </label>
+              {(canEdit || isCreator) && (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteSubtask(subtask.id)}
+                  className="text-gray-400 hover:text-red-500 text-xs px-2 py-1 rounded transition-colors"
+                  title="ลบรายการนี้"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+          {(!task.subtasks || task.subtasks.length === 0) && (
+            <p className="text-xs text-gray-400 italic py-1">
+              ยังไม่มีรายการงานย่อย คุณสามารถเพิ่ม checklist ด้านล่างได้
+            </p>
+          )}
+        </div>
+
+        {/* Add new subtask input */}
+        {(canEdit || isCurrentUserInvolved) && (
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="เพิ่มข้อย่อย เช่น 'ส่งร่างเอกสารให้หัวหน้าตรวจ'..."
+              value={newSubtaskTitle}
+              onChange={(e) => setNewSubtaskTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddSubtask();
+                }
+              }}
+              className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-650 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={handleAddSubtask}
+              disabled={isSubmittingSubtask || !newSubtaskTitle.trim()}
+              className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
+            >
+              + เพิ่มข้อย่อย
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Task Update Section — always visible */}
       <div className="p-4 sm:p-6 border-b-2 border-blue-300 dark:border-blue-800 bg-blue-50/80 dark:bg-blue-950/20 border-l-4 border-l-blue-600 dark:border-l-blue-500">
@@ -1139,6 +1344,48 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
             </div>
           </div>
         )}
+      </div>
+
+      {/* Activity Timeline / Audit Trail */}
+      <div className="p-4 sm:p-6 border-b-2 border-slate-200 dark:border-slate-750 bg-slate-100/50 dark:bg-slate-900/60">
+        <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+          <span>⏱️</span> Activity Timeline (ประวัติกิจกรรมในงาน)
+        </h3>
+        <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+          {task.activities && task.activities.length > 0 ? (
+            task.activities.map((act) => (
+              <div key={act.id} className="flex items-start gap-2.5 text-xs">
+                <span className="w-2 h-2 rounded-full bg-primary-500 mt-1.5 flex-shrink-0" />
+                <div className="flex-1 bg-white dark:bg-slate-800/80 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
+                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                    <span className="font-semibold text-gray-800 dark:text-gray-200">
+                      {act.user_name}
+                    </span>
+                    <span className="text-[10px] text-gray-400">
+                      {new Date(act.created_at).toLocaleString('th-TH', {
+                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                  <p className="text-gray-600 dark:text-gray-300">
+                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 mr-1.5">
+                      {act.action === 'created' ? 'สร้างงาน' :
+                       act.action === 'status_change' ? 'เปลี่ยนสถานะ' :
+                       act.action === 'progress_change' ? 'อัปเดตความคืบหน้า' :
+                       act.action === 'subtask_toggle' ? 'เช็ครายการย่อย' :
+                       act.action === 'recurrence_spawned' ? 'ทำซ้ำรอบใหม่' : act.action}
+                    </span>
+                    {act.details}
+                  </p>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-xs text-gray-400 italic">
+              เริ่มบันทึกกิจกรรมอัตโนมัติเมื่อมีการเปลี่ยนแปลงสถานะหรือความคืบหน้า
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Modal ป้อนเหตุผลก่อน ลบ หรือ เก็บถาวร (Delete/Archive Reason Modal) */}

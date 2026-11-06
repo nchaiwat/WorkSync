@@ -61,11 +61,31 @@ model Task {
   isArchived       Boolean  @default(false) @map("is_archived")
   archiveReason    String?  @map("archive_reason") @db.Text
 
-  comments      Comment[]
-  likes         TaskLike[]
-  reads         TaskRead[]
+  subtasks         Json?    @default("[]") // Array of { id, title, completed, createdAt }
+  recurrence       String?  @default("none") // "none" | "daily" | "weekly" | "monthly"
+  lastReminderSentAt DateTime? @map("last_reminder_sent_at")
+
+  comments         Comment[]
+  likes            TaskLike[]
+  reads            TaskRead[]
+  activities       TaskActivity[]
 
   @@map("tasks")
+}
+
+model TaskActivity {
+  id        String   @id @default(uuid())
+  taskId    String   @map("task_id")
+  userName  String   @map("user_name")
+  action    String   @db.VarChar(50) // "created", "status_change", "progress_change", "subtask_toggle", "deadline_change", "assignee_change"
+  details   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([createdAt(sort: Desc)])
+  @@map("task_activities")
 }
 
 model Comment {

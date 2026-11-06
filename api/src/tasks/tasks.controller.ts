@@ -76,6 +76,15 @@ export class TasksController {
         archive_reason: t.archiveReason,
         is_unread: isUnread,
         last_read_at: lastReadAt ? lastReadAt.toISOString() : null,
+        subtasks: t.subtasks || [],
+        recurrence: t.recurrence || 'none',
+        activities: t.activities ? t.activities.map((a: any) => ({
+          id: a.id,
+          user_name: a.userName,
+          action: a.action,
+          details: a.details,
+          created_at: a.createdAt.toISOString(),
+        })) : [],
         likes: t.likes ? t.likes.map((l: any) => {
           const u = l.user || userMap.get(l.userId);
           if (!u) return { user_id: l.userId };
@@ -151,9 +160,27 @@ export class TasksController {
     const t = await this.tasksService.findOne(id);
     const user = req.user as any;
 
-    // Enforce edit permissions
-    if (user.role !== Role.ADMIN && t.createdBy !== user.id) {
-      throw new ForbiddenException('ไม่มีสิทธิ์แก้ไขงานที่คุณไม่ได้เป็นคนสร้าง (ทำได้เพียงคอมเมนต์)');
+    const isAdmin = user.role === Role.ADMIN || user.role === 'ADMIN';
+    const isCreator = t.createdBy === user.id;
+    const isAssignee = (() => {
+      const u = user;
+      const nick = u.nickname ? `${u.nickname} ` : '';
+      const first = u.firstName || u.username || '';
+      const dept = u.department || 'IT';
+      const formatted = `${nick}(${first})/${dept}`;
+      return (
+        t.assignee === formatted ||
+        t.assignee === u.firstName ||
+        t.assignee === u.username ||
+        (u.firstName && t.assignee.includes(`(${u.firstName})`)) ||
+        (u.username && t.assignee.includes(`(${u.username})`)) ||
+        (u.nickname && t.assignee.startsWith(u.nickname))
+      );
+    })();
+
+    // Enforce edit permissions: Admin, Creator, or Assignee can update
+    if (!isAdmin && !isCreator && !isAssignee) {
+      throw new ForbiddenException('ไม่มีสิทธิ์แก้ไขงานที่คุณไม่ได้เป็นคนสร้างหรือผู้รับผิดชอบ (ทำได้เพียงคอมเมนต์)');
     }
 
     // Map snake_case to camelCase
@@ -164,7 +191,11 @@ export class TasksController {
       body.archiveReason = body.archive_reason;
     }
 
-    await this.tasksService.update(id, body);
+    const updaterDisplayName = user.nickname
+      ? `${user.nickname} (${user.firstName})`
+      : user.firstName || user.username;
+
+    await this.tasksService.update(id, body, updaterDisplayName);
     const finalTask = await this.tasksService.findOne(id);
     const formatted = await this.formatTasks([finalTask], user.id);
     return { data: formatted[0] };
