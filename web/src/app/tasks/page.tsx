@@ -1,22 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import TaskList from '@/components/TaskList';
+import ThemeToggle from '@/components/ThemeToggle';
 import { api } from '@/lib/api';
 import type { Task, User } from '@/types';
 import Link from 'next/link';
 import { getAuthToken, getMe, formatUserDisplayName } from '@/lib/auth';
+import { isCurrentUserMatch, isSamePerson } from '@/lib/userMatch';
 
 export default function TasksPage() {
   const router = useRouter();
-  
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [unfilteredTasks, setUnfilteredTasks] = useState<Task[]>([]);
+
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [creatorFilter, setCreatorFilter] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; username: string; first_name: string } | null>(null);
+  const [memberFilter, setMemberFilter] = useState<string | null>(null);
+  const [viewFilter, setViewFilter] = useState<'assigned_by_me' | 'involved_tasks' | 'all'>('all');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
 
   useEffect(() => {
@@ -27,12 +29,7 @@ export default function TasksPage() {
     }
     getMe(token)
       .then((user) => {
-        setCurrentUser({
-          id: user.id,
-          name: formatUserDisplayName(user),
-          username: user.username || '',
-          first_name: user.first_name || '',
-        });
+        setCurrentUser(user);
         const ADMIN_ROLE_ID = 'f9826f7f-a8b9-4fe0-9d61-3047fbc101f0';
         const roleId = typeof user.role === 'object' ? user.role?.id : user.role;
         if (roleId === ADMIN_ROLE_ID) {
@@ -48,70 +45,116 @@ export default function TasksPage() {
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const creator = urlParams.get('creator');
-    if (creator) {
-      setCreatorFilter(creator);
+    const member = urlParams.get('member') || urlParams.get('creator');
+    const view = urlParams.get('view');
+
+    if (member) {
+      setMemberFilter(member);
+    }
+
+    if (view === 'assigned_by_me' || view === 'involved_tasks' || view === 'all') {
+      setViewFilter(view);
+    } else if (view === 'my_tasks') {
+      setViewFilter('all');
     }
   }, []);
 
-  const isUserMatch = (taskField: string | null | undefined) => {
-    if (!taskField || !currentUser) return false;
-    if (taskField === currentUser.name) return true;
-    if (currentUser.first_name && taskField.includes(`(${currentUser.first_name})`)) return true;
-    if (currentUser.username && taskField.includes(`(${currentUser.username})`)) return true;
-    if (taskField === currentUser.first_name || taskField === currentUser.username) return true;
-    return false;
-  };
-
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
+    if (!currentUser) return;
+    setIsLoading(true);
     try {
       const result = await api.getTasks();
-      
-      let relatedTasks = result.data.filter(
+
+      // Filter all non-archived tasks related to current user
+      const relatedTasks = result.data.filter(
         (t) =>
           !t.is_archived &&
-          (t.creator_id === currentUser?.id ||
-          isUserMatch(t.assignee) ||
-          isUserMatch(t.manager) ||
-          (t.collaborators && t.collaborators.some((col) => isUserMatch(col))))
+          (t.creator_id === currentUser.id ||
+            isCurrentUserMatch(t.created_by_name, currentUser) ||
+            isCurrentUserMatch(t.assignee, currentUser) ||
+            isCurrentUserMatch(t.manager, currentUser) ||
+            (t.collaborators && t.collaborators.some((col) => isCurrentUserMatch(col, currentUser))))
       );
-      
-      setUnfilteredTasks(relatedTasks);
 
-      let filtered = [...relatedTasks];
-      if (creatorFilter) {
-        filtered = filtered.filter(t => t.created_by_name === creatorFilter || t.assignee === creatorFilter);
-      }
-
-      filtered.sort((a, b) => {
-        const aIsManager = isUserMatch(a.manager);
-        const bIsManager = isUserMatch(b.manager);
-        if (aIsManager && !bIsManager) return -1;
-        if (!aIsManager && bIsManager) return 1;
-
-        const aIsAssignee = isUserMatch(a.assignee);
-        const bIsAssignee = isUserMatch(b.assignee);
-        if (aIsAssignee && !bIsAssignee) return -1;
-        if (!aIsAssignee && bIsAssignee) return 1;
-
+      // Sort by recent update
+      relatedTasks.sort((a, b) => {
         const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
         const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
         return dateB - dateA;
       });
-      
-      setTasks(filtered);
-    } catch {
-      setTasks([]);
+
+      setAllTasks(relatedTasks);
+    } catch (err) {
+      console.error('Error loading tasks:', err);
+      setAllTasks([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentUser]);
 
   useEffect(() => {
     if (currentUser) {
       loadTasks();
     }
-  }, [creatorFilter, currentUser]);
+  }, [currentUser, loadTasks]);
+
+  // Tasks involving the selected member
+  const memberTasks = useMemo(() => {
+    if (!memberFilter) return allTasks;
+    return allTasks.filter(
+      (t) =>
+        isSamePerson(t.assignee, memberFilter) ||
+        isSamePerson(t.created_by_name, memberFilter)
+    );
+  }, [allTasks, memberFilter]);
+
+  // Tasks strictly assigned by currentUser to this member
+  const assignedByMeTasks = useMemo(() => {
+    if (!currentUser) return [];
+    return memberTasks.filter((t) => {
+      const isCreator =
+        t.creator_id === currentUser.id ||
+        isCurrentUserMatch(t.created_by_name, currentUser);
+      const isAssigneeNotMe = !isCurrentUserMatch(t.assignee, currentUser);
+      const isTargetAssignee = memberFilter
+        ? isSamePerson(t.assignee, memberFilter)
+        : true;
+
+      return isCreator && isAssigneeNotMe && isTargetAssignee;
+    });
+  }, [memberTasks, currentUser, memberFilter]);
+
+  // Tasks reported to or involving currentUser (where currentUser is manager/collaborator, not creator)
+  const involvedTasks = useMemo(() => {
+    if (!currentUser) return [];
+    return memberTasks.filter((t) => {
+      const isCreator =
+        t.creator_id === currentUser.id ||
+        isCurrentUserMatch(t.created_by_name, currentUser);
+      if (isCreator) return false;
+
+      const isManager = isCurrentUserMatch(t.manager, currentUser);
+      const isCollaborator =
+        t.collaborators &&
+        t.collaborators.some((col) => isCurrentUserMatch(col, currentUser));
+
+      return isManager || isCollaborator;
+    });
+  }, [memberTasks, currentUser]);
+
+  // Determine tasks to display based on selected viewFilter
+  const tasksByView = useMemo(() => {
+    if (!memberFilter) return allTasks;
+    if (viewFilter === 'assigned_by_me') return assignedByMeTasks;
+    if (viewFilter === 'involved_tasks') return involvedTasks;
+    return memberTasks;
+  }, [memberFilter, viewFilter, assignedByMeTasks, involvedTasks, memberTasks, allTasks]);
+
+  // Apply status filter (all, todo, in_progress, review, done)
+  const displayedTasks = useMemo(() => {
+    if (statusFilter === 'all') return tasksByView;
+    return tasksByView.filter((t) => t.status === statusFilter);
+  }, [tasksByView, statusFilter]);
 
   const handleExportExcel = () => {
     const headers = [
@@ -127,19 +170,18 @@ export default function TasksPage() {
       'ผู้สร้างงาน',
       'วันที่สร้างงาน',
       'อัปเดตล่าสุด',
-      'อัปเดตความคืบหน้าล่าสุด'
     ];
 
     const statusMap: Record<string, string> = {
       todo: 'To Do',
       in_progress: 'Doing',
       review: 'Review',
-      done: 'Done'
+      done: 'Done',
     };
 
     const csvRows = [
       headers.join(','),
-      ...unfilteredTasks.map(t => {
+      ...displayedTasks.map((t) => {
         const title = `"${(t.title || '').replace(/"/g, '""')}"`;
         const desc = `"${(t.description || '').replace(/"/g, '""')}"`;
         const projOwner = `"${(t.project_owner || '').replace(/"/g, '""')}"`;
@@ -148,16 +190,16 @@ export default function TasksPage() {
         const assignee = `"${(t.assignee || '').replace(/"/g, '""')}"`;
         const manager = `"${(t.manager || '').replace(/"/g, '""')}"`;
         const collaborators = `"${(t.collaborators || []).join('; ').replace(/"/g, '""')}"`;
-        const deadline = t.deadline ? `"${new Date(t.deadline).toLocaleDateString('th-TH')}"` : '""';
+        const deadline = t.deadline
+          ? `"${new Date(t.deadline).toLocaleDateString('th-TH')}"`
+          : '""';
         const createdBy = `"${(t.created_by_name || '').replace(/"/g, '""')}"`;
-        const createdAt = t.created_at ? `"${new Date(t.created_at).toLocaleString('th-TH')}"` : '""';
-        const updatedAt = t.updated_at ? `"${new Date(t.updated_at).toLocaleString('th-TH')}"` : '""';
-        
-        let latestUpdate = t.latest_update || '';
-        const sections = latestUpdate.split(/---\r?\n|---/g).map(s => s.trim()).filter(Boolean);
-        const firstSec = sections[0] || '';
-        const cleanUpdate = firstSec.replace(/\[attachment:([^|\]]+)\|name:([^\]]+)\]/g, '').trim();
-        const latestUpdateEscaped = `"${cleanUpdate.replace(/"/g, '""')}"`;
+        const createdAt = t.created_at
+          ? `"${new Date(t.created_at).toLocaleString('th-TH')}"`
+          : '""';
+        const updatedAt = t.updated_at
+          ? `"${new Date(t.updated_at).toLocaleString('th-TH')}"`
+          : '""';
 
         return [
           title,
@@ -172,9 +214,8 @@ export default function TasksPage() {
           createdBy,
           createdAt,
           updatedAt,
-          latestUpdateEscaped
         ].join(',');
-      })
+      }),
     ];
 
     const csvContent = '\uFEFF' + csvRows.join('\n');
@@ -182,50 +223,127 @@ export default function TasksPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `tasks_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute(
+      'download',
+      `worksync_tasks_${new Date().toISOString().slice(0, 10)}.csv`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const filteredTasks = statusFilter === 'all'
-    ? tasks
-    : tasks.filter(t => t.status === statusFilter);
+  const memberNickname = memberFilter
+    ? memberFilter.match(/^([^\s(]+)/)?.[1] || memberFilter
+    : null;
 
   return (
     <div className="min-h-screen bg-[#F2F2F7] dark:bg-[#0B0F19] text-slate-900 dark:text-slate-100 pb-16 transition-colors">
-      <header className="sticky top-0 z-30 backdrop-blur-xl bg-white/80 dark:bg-[#151D2A]/80 border-b border-slate-200/80 dark:border-slate-800/80">
+      {/* iOS Translucent Header */}
+      <header className="sticky top-0 z-30 backdrop-blur-xl bg-white/85 dark:bg-[#151E2E]/85 border-b border-slate-200/80 dark:border-slate-800/80 shadow-[0_1px_12px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link href="/" className="inline-flex items-center gap-1 text-[#007AFF] hover:opacity-80 transition-opacity font-medium text-sm sm:text-base">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-[#007AFF] hover:opacity-80 transition-opacity font-semibold text-sm active:scale-95"
+          >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
             </svg>
-            <span>กลับ</span>
+            <span>แดชบอร์ด</span>
           </Link>
-          <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate max-w-[200px] sm:max-w-md">
-            {creatorFilter ? `ภารกิจของ ${creatorFilter.match(/^([^\s(]+)/)?.[1] || creatorFilter}` : 'ภารกิจทั้งหมด'}
+
+          <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate max-w-[220px] sm:max-w-md">
+            {memberNickname ? `ภารกิจของ ${memberNickname}` : 'ภารกิจทั้งหมด'}
           </h1>
+
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <button
               onClick={handleExportExcel}
-              className="hidden sm:inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold hover:bg-slate-50 transition-colors shadow-sm"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm active:scale-95 text-slate-700 dark:text-slate-200"
               title="Export CSV"
             >
-              📥 CSV
+              <span>📥</span>
+              <span>CSV</span>
             </button>
             <Link
               href="/tasks/new"
-              className="px-3.5 py-1.5 bg-[#007AFF] hover:bg-[#0062cc] text-white rounded-xl text-xs sm:text-sm font-semibold transition-all shadow-[0_2px_8px_rgba(0,122,255,0.3)] active:scale-95"
+              className="px-3.5 py-1.5 bg-[#007AFF] hover:bg-[#0062cc] text-white rounded-xl text-xs sm:text-sm font-semibold transition-all shadow-[0_2px_8px_rgba(0,122,255,0.3)] active:scale-95 flex items-center gap-1"
             >
-              ➕ เพิ่มงาน
+              <span>+</span>
+              <span>เพิ่มงาน</span>
             </Link>
           </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-6">
-        {/* iOS-style Pill Status Filter */}
-        <div className="flex gap-1.5 mb-6 overflow-x-auto pb-2 scrollbar-none">
+        {/* Member View Switcher (Segmented Control) */}
+        {memberFilter && (
+          <div className="mb-6 bg-white dark:bg-[#151E2E] rounded-3xl p-4 border border-slate-200/90 dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">มุมมองภารกิจ</p>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                  {memberFilter}
+                </h2>
+              </div>
+              <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] border border-blue-200/60 dark:border-blue-900/40">
+                รวม {tasksByView.length} ภารกิจ
+              </span>
+            </div>
+
+            {/* Segmented Control strictly separating Assigned vs Reported */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl">
+              <button
+                onClick={() => setViewFilter('assigned_by_me')}
+                className={`py-2 px-2 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                  viewFilter === 'assigned_by_me'
+                    ? 'bg-white dark:bg-slate-700 text-[#007AFF] dark:text-blue-400 shadow-sm font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <span>🎯</span>
+                <span className="truncate">งานที่ฉันมอบหมาย</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 dark:bg-blue-900/60 text-[#007AFF] dark:text-blue-300 font-mono">
+                  {assignedByMeTasks.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setViewFilter('involved_tasks')}
+                className={`py-2 px-2 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                  viewFilter === 'involved_tasks'
+                    ? 'bg-white dark:bg-slate-700 text-[#007AFF] dark:text-blue-400 shadow-sm font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <span>👥</span>
+                <span className="truncate">งานที่รายงานฉัน</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono">
+                  {involvedTasks.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setViewFilter('all')}
+                className={`py-2 px-2 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                  viewFilter === 'all'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <span>📋</span>
+                <span className="truncate">ทั้งหมด</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono">
+                  {memberTasks.length}
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Status Pills */}
+        <div className="flex gap-1.5 mb-6 overflow-x-auto pb-1 scrollbar-none">
           {[
             { id: 'all', label: 'ทั้งหมด' },
             { id: 'todo', label: 'To Do' },
@@ -239,7 +357,7 @@ export default function TasksPage() {
               className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
                 statusFilter === item.id
                   ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
-                  : 'bg-white dark:bg-[#151D2A] text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-800 hover:border-slate-300'
+                  : 'bg-white dark:bg-[#151E2E] text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
               }`}
             >
               {item.label}
@@ -247,19 +365,37 @@ export default function TasksPage() {
           ))}
         </div>
 
+        {/* Tasks List Content */}
         {isLoading ? (
           <div className="text-center py-16">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-[#007AFF] border-t-transparent" />
             <p className="text-xs text-slate-400 mt-3 font-medium">กำลังโหลดภารกิจ...</p>
           </div>
-        ) : filteredTasks.length === 0 ? (
-          <div className="text-center py-16 rounded-2xl bg-white dark:bg-[#151D2A] border border-slate-200/80 dark:border-slate-800 p-8 shadow-sm">
-            <div className="text-4xl mb-3">📋</div>
-            <h3 className="text-base font-bold text-slate-800 dark:text-slate-200 mb-1">ไม่พบภารกิจ</h3>
-            <p className="text-xs text-slate-400">ยังไม่มีงานในสถานะที่เลือก</p>
+        ) : displayedTasks.length === 0 ? (
+          <div className="text-center py-16 px-4 rounded-3xl bg-white dark:bg-[#151E2E] border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_24px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+            <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-[#007AFF] flex items-center justify-center text-2xl">
+              {viewFilter === 'assigned_by_me' ? '🎯' : viewFilter === 'involved_tasks' ? '👥' : '📋'}
+            </div>
+            <h3 className="text-base font-bold text-slate-800 dark:text-slate-200 mb-1">
+              {viewFilter === 'assigned_by_me'
+                ? `ไม่มีงานที่คุณมอบหมายให้ ${memberNickname || 'สมาชิกคนนี้'}`
+                : viewFilter === 'involved_tasks'
+                ? `ไม่มีงานที่ ${memberNickname || 'สมาชิกคนนี้'} รายงานถึงคุณ`
+                : 'ไม่พบภารกิจในสถานะนี้'}
+            </h3>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+              {viewFilter === 'assigned_by_me'
+                ? 'หากต้องการมอบหมายงานใหม่ สามารถกดปุ่ม + เพิ่มงาน แล้วเลือกโหมด "มอบหมายงานให้ทีม"'
+                : 'งานที่เกี่ยวข้องจะแสดงเมื่อมีภารกิจที่ตรงกับเงื่อนไข'}
+            </p>
           </div>
         ) : (
-          <TaskList tasks={filteredTasks} loading={false} currentUserName={currentUser?.name} users={users} />
+          <TaskList
+            tasks={displayedTasks}
+            loading={false}
+            currentUserName={currentUser?.first_name || currentUser?.username}
+            users={users}
+          />
         )}
       </main>
     </div>

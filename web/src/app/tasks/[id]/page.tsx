@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import TaskDetail from '@/components/TaskDetail';
+import ThemeToggle from '@/components/ThemeToggle';
 import { api } from '@/lib/api';
 import { getAuthToken, getMe, formatUserDisplayName } from '@/lib/auth';
 import type { Task, User } from '@/types';
@@ -160,7 +161,7 @@ export default function TaskDetailPage() {
           <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate max-w-[200px] sm:max-w-md">
             รายละเอียดภารกิจ
           </h1>
-          <div className="w-12" />
+          <ThemeToggle />
         </div>
       </header>
 

@@ -47,7 +47,7 @@ const config: Config = {
           bgLight: '#F2F2F7',
           bgDark: '#0B0F19',
           cardLight: '#FFFFFF',
-          cardDark: '#151D2A',
+          cardDark: '#151E2E',
         },
       },
     },

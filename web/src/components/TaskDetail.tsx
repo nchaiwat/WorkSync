@@ -434,9 +434,9 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
   const statusHeaderBorder = statusHeaderBorders[task.status] || 'border-t-slate-400';
 
   return (
-    <div className={`bg-white dark:bg-slate-800 rounded-2xl border-2 border-slate-300 dark:border-slate-700 overflow-hidden shadow-md border-t-8 ${statusHeaderBorder}`}>
+    <div className="bg-white dark:bg-[#151E2E] rounded-3xl border border-slate-200/90 dark:border-slate-800 overflow-hidden shadow-[0_4px_24px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
       {/* Header */}
-      <div className="p-4 sm:p-6 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/40">
+      <div className="p-4 sm:p-6 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             {isEditing && canEdit ? (

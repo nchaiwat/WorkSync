@@ -34,8 +34,27 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="th" className="overflow-x-hidden">
-      <body className="min-h-screen overflow-x-hidden antialiased bg-[#F2F2F7] dark:bg-[#0B0F19] text-slate-900 dark:text-slate-100">
+    <html lang="th" className="overflow-x-hidden" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var saved = localStorage.getItem('worksync_theme');
+                  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  if (saved === 'dark' || (!saved && prefersDark)) {
+                    document.documentElement.classList.add('dark');
+                  } else {
+                    document.documentElement.classList.remove('dark');
+                  }
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body className="min-h-screen overflow-x-hidden antialiased bg-[#F2F2F7] dark:bg-[#0B0F19] text-slate-900 dark:text-slate-100 transition-colors">
         {children}
       </body>
     </html>

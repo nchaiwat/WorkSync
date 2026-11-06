@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { getAuthFirstName, getAuthUsername, getAuthToken, getMe, formatUserDisplayName } from '@/lib/auth';
 import { STATUS_CONFIG } from '@/types';
 import type { User } from '@/types';
+import ThemeToggle from '@/components/ThemeToggle';
 
 export default function NewTaskPage() {
   const router = useRouter();
@@ -265,7 +266,7 @@ export default function NewTaskPage() {
           <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white">
             เพิ่มภารกิจใหม่
           </h1>
-          <div className="w-12" />
+          <ThemeToggle />
         </div>
       </header>
 

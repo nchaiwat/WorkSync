@@ -10,6 +10,8 @@ import { getAuthToken, getAuthUsername, logout as authLogout, getMe, formatUserD
 import type { Task, TeamMember, User } from '@/types';
 import { DEPARTMENTS } from '@/types';
 import UserDisplay from '@/components/UserDisplay';
+import ThemeToggle from '@/components/ThemeToggle';
+import { isCurrentUserMatch, isSamePerson } from '@/lib/userMatch';
 
 export default function Home() {
   const router = useRouter();
@@ -203,9 +205,10 @@ export default function Home() {
          (t) =>
            !t.is_archived &&
            (t.creator_id === currentUser?.id ||
-           isUserMatch(t.assignee) ||
-           isUserMatch(t.manager) ||
-           (t.collaborators && t.collaborators.some(col => isUserMatch(col))))
+           isCurrentUserMatch(t.created_by_name, currentUser) ||
+           isCurrentUserMatch(t.assignee, currentUser) ||
+           isCurrentUserMatch(t.manager, currentUser) ||
+           (t.collaborators && t.collaborators.some(col => isCurrentUserMatch(col, currentUser))))
        );
  
        setUnfilteredTasks(allRelatedTasks);
@@ -224,25 +227,28 @@ export default function Home() {
         setTasks(activeTasks);
       } else if (filter === 'my_tasks') {
         // "งานของฉัน" (My Tasks) shows tasks where I am the assignee
-        const filtered = activeTasks.filter((t) => isUserMatch(t.assignee));
+        const filtered = activeTasks.filter((t) => isCurrentUserMatch(t.assignee, currentUser));
         setTasks(filtered);
       } else if (filter === 'assigned_by_me') {
-        // "งานที่ฉันมอบหมาย" (Assigned by Me) shows tasks where I created or manage the task, but assignee is someone else
+        // "งานที่ฉันมอบหมาย" (Assigned by Me): ONLY tasks where currentUser created and assigned to someone else.
+        // Subordinates choosing currentUser as manager are NOT assigned by me!
         const filtered = activeTasks.filter(
           (t) =>
-            !isUserMatch(t.assignee) &&
-            (t.creator_id === currentUser?.id || isUserMatch(t.created_by_name) || isUserMatch(t.manager))
+            !isCurrentUserMatch(t.assignee, currentUser) &&
+            Boolean(t.assignee && t.assignee.trim()) &&
+            (t.creator_id === currentUser?.id || isCurrentUserMatch(t.created_by_name, currentUser))
         );
         setTasks(filtered);
       } else {
-        // "งานที่เกี่ยวข้อง" (Related Tasks) shows other tasks where I am involved (collaborator or manager, but not assignee and not creator)
+        // "งานที่เกี่ยวข้อง" (Related Tasks): Tasks where currentUser is involved (as manager or collaborator),
+        // but NOT the creator and NOT the assignee.
         const filtered = activeTasks.filter(
           (t) =>
-            !isUserMatch(t.assignee) &&
+            !isCurrentUserMatch(t.assignee, currentUser) &&
             t.creator_id !== currentUser?.id &&
-            !isUserMatch(t.created_by_name) &&
-            (isUserMatch(t.manager) ||
-              (t.collaborators && t.collaborators.some(col => isUserMatch(col))))
+            !isCurrentUserMatch(t.created_by_name, currentUser) &&
+            (isCurrentUserMatch(t.manager, currentUser) ||
+              (t.collaborators && t.collaborators.some(col => isCurrentUserMatch(col, currentUser))))
         );
         setTasks(filtered);
       }
@@ -456,33 +462,40 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#F2F2F7] dark:bg-[#0B0F19] text-slate-900 dark:text-slate-100 transition-colors">
       {/* iOS Translucent Frosted Glass Header */}
-      <header className="sticky top-0 z-30 backdrop-blur-xl bg-white/80 dark:bg-[#151D2A]/85 border-b border-slate-200/80 dark:border-slate-800/80 shadow-[0_1px_8px_rgba(0,0,0,0.02)] transition-colors">
-        <div className="max-w-5xl mx-auto px-4 py-3 sm:py-3.5">
+      <header className="sticky top-0 z-30 backdrop-blur-xl bg-white/85 dark:bg-[#151E2E]/85 border-b border-slate-200/80 dark:border-slate-800/80 shadow-[0_1px_12px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.3)] transition-colors">
+        <div className="max-w-6xl mx-auto px-4 py-3 sm:py-3.5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            {/* Logo and Mobile Avatar Toggle */}
+            {/* Logo and Mobile Avatar / Dark mode Toggle */}
             <div className="flex items-center justify-between w-full sm:w-auto">
-              <Link href="/">
-                <h1 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                  🔄 WorkSync
-                </h1>
+              <Link href="/" className="flex items-center gap-2.5 group">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#007AFF] to-[#5856D6] flex items-center justify-center text-white shadow-[0_2px_10px_rgba(0,122,255,0.3)] group-hover:scale-105 transition-transform flex-shrink-0">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-lg font-black tracking-tight text-slate-900 dark:text-white leading-none">WorkSync</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium tracking-wider uppercase leading-none mt-0.5">Task Collaboration</span>
+                </div>
               </Link>
 
               {/* Mobile Actions */}
               {isLoggedIn && (
-                <div className="flex items-center gap-3 sm:hidden">
+                <div className="flex items-center gap-2 sm:hidden">
+                  <ThemeToggle />
                   <button
                     onClick={handleExportExcel}
-                    className="w-8 h-8 bg-emerald-50 hover:bg-emerald-105 border border-emerald-300 dark:bg-emerald-950/40 dark:hover:bg-emerald-950/80 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 rounded-lg text-sm font-extrabold transition-all active:scale-95 shadow-sm flex items-center justify-center"
-                    title="Export Excel"
+                    className="w-9 h-9 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-sm flex items-center justify-center"
+                    title="Export CSV"
                   >
-                    E
+                    📥
                   </button>
                   <Link
                     href="/tasks/new"
-                    className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+                    className="w-9 h-9 bg-[#007AFF] text-white rounded-xl text-base font-bold transition-all shadow-sm flex items-center justify-center active:scale-95"
                     title="เพิ่มงาน"
                   >
-                    ➕
+                    +
                   </Link>
                   <div className="relative">
                     <button
@@ -490,7 +503,7 @@ export default function Home() {
                         e.stopPropagation();
                         setShowUserDropdown(!showUserDropdown);
                       }}
-                      className="w-9 h-9 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-md active:scale-95 transition-transform"
+                      className="w-9 h-9 rounded-full overflow-hidden ring-2 ring-blue-500/30 flex items-center justify-center text-white text-sm font-bold shadow-md active:scale-95 transition-transform"
                     >
                       {currentUser?.avatar_url ? (
                         <img src={currentUser.avatar_url} alt="Profile" className="w-full h-full object-cover" />
@@ -552,76 +565,83 @@ export default function Home() {
 
             {/* iOS-style Segmented Navigation & Filters */}
             <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
-              <div className="inline-flex p-1 bg-slate-200/80 dark:bg-slate-800/90 rounded-2xl overflow-x-auto max-w-full shadow-inner scrollbar-none">
+              <div className="inline-flex p-1 bg-slate-200/70 dark:bg-slate-800/90 rounded-2xl overflow-x-auto max-w-full shadow-inner scrollbar-none">
                 <button
                   onClick={() => {
                     setFilter('dash');
                     sessionStorage.setItem('worksync_tab_filter', 'dash');
                   }}
-                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
                     filter === 'dash'
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
-                  📊 ภาพรวม
+                  <span>📊</span>
+                  <span>ภาพรวม</span>
                 </button>
                 <button
                   onClick={() => {
                     setFilter('my_tasks');
                     sessionStorage.setItem('worksync_tab_filter', 'my_tasks');
                   }}
-                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
                     filter === 'my_tasks'
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
-                  👤 งานของฉัน
+                  <span>👤</span>
+                  <span>งานของฉัน</span>
                 </button>
                 <button
                   onClick={() => {
                     setFilter('assigned_by_me');
                     sessionStorage.setItem('worksync_tab_filter', 'assigned_by_me');
                   }}
-                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
                     filter === 'assigned_by_me'
-                      ? 'bg-[#007AFF] text-white shadow-[0_2px_8px_rgba(0,122,255,0.3)]'
+                      ? 'bg-white dark:bg-slate-700 text-[#007AFF] dark:text-blue-400 shadow-[0_2px_8px_rgba(0,0,0,0.08)] font-bold'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
-                  🎯 งานที่มอบหมาย
+                  <span>🎯</span>
+                  <span>งานที่มอบหมาย</span>
                 </button>
                 <button
                   onClick={() => {
                     setFilter('involved_tasks');
                     sessionStorage.setItem('worksync_tab_filter', 'involved_tasks');
                   }}
-                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
                     filter === 'involved_tasks'
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
-                  👥 งานเกี่ยวข้อง
+                  <span>👥</span>
+                  <span>งานเกี่ยวข้อง</span>
                 </button>
               </div>
 
               {/* Desktop-only elements */}
               {isLoggedIn ? (
-                <div className="hidden sm:flex items-center gap-3 ml-2">
+                <div className="hidden sm:flex items-center gap-2.5 ml-2">
+                  <ThemeToggle />
                   <button
                     onClick={handleExportExcel}
-                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shadow-sm flex items-center gap-1.5 active:scale-95"
+                    className="px-3.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shadow-sm flex items-center gap-1.5 active:scale-95"
                     title="Export CSV"
                   >
-                    📥 Export
+                    <span>📥</span>
+                    <span>Export</span>
                   </button>
                   <Link
                     href="/tasks/new"
-                    className="px-3.5 py-1.5 bg-[#007AFF] hover:bg-[#0062cc] text-white rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shadow-[0_2px_8px_rgba(0,122,255,0.3)] active:scale-95"
+                    className="px-3.5 py-1.5 bg-[#007AFF] hover:bg-[#0062cc] text-white rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shadow-[0_2px_8px_rgba(0,122,255,0.3)] active:scale-95 flex items-center gap-1"
                   >
-                    ➕ เพิ่มงาน
+                    <span>+</span>
+                    <span>เพิ่มงาน</span>
                   </Link>
 
                   <div className="relative">
@@ -630,7 +650,7 @@ export default function Home() {
                         e.stopPropagation();
                         setShowUserDropdown(!showUserDropdown);
                       }}
-                      className="w-9 h-9 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-md hover:brightness-105 active:scale-95 transition-transform"
+                      className="w-9 h-9 rounded-full overflow-hidden ring-2 ring-blue-500/30 flex items-center justify-center text-white text-sm font-bold shadow-md hover:brightness-105 active:scale-95 transition-transform"
                     >
                       {currentUser?.avatar_url ? (
                         <img src={currentUser.avatar_url} alt="Profile" className="w-full h-full object-cover" />
@@ -713,7 +733,7 @@ export default function Home() {
         ) : filter === 'dash' ? (
           <DashboardView tasks={unfilteredTasks} users={users} currentUserName={currentUser?.first_name || currentUser?.username} />
         ) : (
-          <TeamDashboard members={members} loading={isLoading} isMyTasks={filter === 'my_tasks'} />
+          <TeamDashboard members={members} loading={isLoading} filterMode={filter} isMyTasks={filter === 'my_tasks'} />
         )}
       </main>
 

@@ -16,7 +16,7 @@ export default function TaskList({ tasks, loading, title, currentUserName, users
     return (
       <div className="space-y-3">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-white dark:bg-[#151D2A] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 animate-pulse shadow-sm">
+          <div key={i} className="bg-white dark:bg-[#151E2E] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 animate-pulse shadow-sm">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700" />
               <div className="flex-1">
@@ -32,7 +32,7 @@ export default function TaskList({ tasks, loading, title, currentUserName, users
 
   if (tasks.length === 0) {
     return (
-      <div className="text-center py-16 rounded-2xl bg-white dark:bg-[#151D2A] border border-slate-200/80 dark:border-slate-800 p-8 shadow-sm">
+      <div className="text-center py-16 rounded-2xl bg-white dark:bg-[#151E2E] border border-slate-200/80 dark:border-slate-800 p-8 shadow-sm">
         <div className="text-4xl mb-3">📋</div>
         <h3 className="text-base font-bold text-slate-800 dark:text-slate-200 mb-1">
           ไม่พบภารกิจ

@@ -176,25 +176,25 @@ export default function DashboardView({ tasks, users, currentUserName }: Dashboa
     <div className="space-y-6">
       {/* 1. iOS Stat Capsule Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white dark:bg-[#151D2A] border border-slate-200/90 dark:border-slate-800 p-4 sm:p-5 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+        <div className="bg-white dark:bg-[#151E2E] border border-slate-200/90 dark:border-slate-800 p-4 sm:p-5 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] flex flex-col justify-between">
           <div className="text-2xl sm:text-3xl font-extrabold text-[#007AFF] font-mono">{statsSummary.total}</div>
           <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-2 flex items-center gap-1.5">
             <span>📋</span> ภารกิจทั้งหมด
           </div>
         </div>
-        <div className="bg-white dark:bg-[#151D2A] border border-slate-200/90 dark:border-slate-800 p-4 sm:p-5 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+        <div className="bg-white dark:bg-[#151E2E] border border-slate-200/90 dark:border-slate-800 p-4 sm:p-5 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] flex flex-col justify-between">
           <div className="text-2xl sm:text-3xl font-extrabold text-[#34C759] font-mono">{statsSummary.completed}</div>
           <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-2 flex items-center gap-1.5">
             <span>✅</span> เสร็จสิ้นแล้ว
           </div>
         </div>
-        <div className="bg-white dark:bg-[#151D2A] border border-slate-200/90 dark:border-slate-800 p-4 sm:p-5 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+        <div className="bg-white dark:bg-[#151E2E] border border-slate-200/90 dark:border-slate-800 p-4 sm:p-5 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] flex flex-col justify-between">
           <div className="text-2xl sm:text-3xl font-extrabold text-[#FF9500] font-mono">{statsSummary.doing}</div>
           <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-2 flex items-center gap-1.5">
             <span>🔄</span> ดำเนินการ & ตรวจสอบ
           </div>
         </div>
-        <div className="bg-white dark:bg-[#151D2A] border border-slate-200/90 dark:border-slate-800 p-4 sm:p-5 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+        <div className="bg-white dark:bg-[#151E2E] border border-slate-200/90 dark:border-slate-800 p-4 sm:p-5 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.03)] flex flex-col justify-between">
           <div className={`text-2xl sm:text-3xl font-extrabold font-mono ${statsSummary.overdue > 0 ? 'text-[#FF3B30] animate-pulse' : 'text-slate-400'}`}>
             {statsSummary.overdue}
           </div>
@@ -207,7 +207,7 @@ export default function DashboardView({ tasks, users, currentUserName }: Dashboa
       {/* 2. Drill-Down Levels */}
       {!selectedDept ? (
         /* LEVEL 1: Department Overview */
-        <div className="bg-white dark:bg-[#151D2A] border border-slate-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] space-y-6">
+        <div className="bg-white dark:bg-[#151E2E] border border-slate-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] space-y-6">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -297,7 +297,7 @@ export default function DashboardView({ tasks, users, currentUserName }: Dashboa
           <div className="flex items-center gap-2">
             <button
               onClick={() => setSelectedDept(null)}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#151D2A] text-xs font-semibold text-[#007AFF] hover:bg-slate-50 transition-colors shadow-sm"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#151E2E] text-xs font-semibold text-[#007AFF] hover:bg-slate-50 transition-colors shadow-sm"
             >
               <span>← แผนกทั้งหมด</span>
             </button>
@@ -307,7 +307,7 @@ export default function DashboardView({ tasks, users, currentUserName }: Dashboa
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-            <div className="lg:col-span-1 bg-white dark:bg-[#151D2A] border border-slate-200/90 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col justify-center items-center">
+            <div className="lg:col-span-1 bg-white dark:bg-[#151E2E] border border-slate-200/90 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col justify-center items-center">
               <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-3 text-center uppercase tracking-wider">
                 สัดส่วนงานของคนในแผนก
               </h3>
@@ -359,7 +359,7 @@ export default function DashboardView({ tasks, users, currentUserName }: Dashboa
                 <div
                   key={member.name}
                   onClick={() => setSelectedMember(member.name)}
-                  className="bg-white dark:bg-[#151D2A] border border-slate-200/90 dark:border-slate-800 rounded-2xl overflow-hidden cursor-pointer hover:border-[#007AFF] hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+                  className="bg-white dark:bg-[#151E2E] border border-slate-200/90 dark:border-slate-800 rounded-2xl overflow-hidden cursor-pointer hover:border-[#007AFF] hover:shadow-md transition-all duration-200 flex flex-col justify-between"
                 >
                   <div className="p-4 flex items-center gap-3">
                     {member.avatar_url ? (
@@ -402,7 +402,7 @@ export default function DashboardView({ tasks, users, currentUserName }: Dashboa
           <div className="flex items-center gap-2">
             <button
               onClick={() => setSelectedMember(null)}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#151D2A] text-xs font-semibold text-[#007AFF] hover:bg-slate-50 transition-colors shadow-sm"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#151E2E] text-xs font-semibold text-[#007AFF] hover:bg-slate-50 transition-colors shadow-sm"
             >
               <span>← คนในแผนก {selectedDept}</span>
             </button>

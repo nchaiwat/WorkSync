@@ -5,6 +5,7 @@ import { STATUS_CONFIG, PROGRESS_COLORS } from '@/types';
 import Link from 'next/link';
 import UserDisplay from './UserDisplay';
 import { formatUserDisplayName } from '@/lib/auth';
+import { isSamePerson } from '@/lib/userMatch';
 
 interface TaskCardProps {
   task: Task;
@@ -80,31 +81,31 @@ export default function TaskCard({ task, compact = false, currentUserName, users
     }
   })();
 
-  const isManager = currentUserName && (
-    task.manager === currentUserName ||
-    (task.manager && task.manager.includes(`(${currentUserName})`))
-  );
+  const isManager = Boolean(currentUserName && isSamePerson(task.manager, currentUserName));
 
   // Check if this task was delegated to someone else
-  const isDelegatedToOther = task.created_by_name && task.assignee && (
-    task.created_by_name !== task.assignee &&
-    !task.assignee.includes(task.created_by_name)
+  const isDelegatedToOther = Boolean(
+    task.created_by_name &&
+    task.assignee &&
+    !isSamePerson(task.created_by_name, task.assignee)
   );
 
-  const isMyAssignedTask = isDelegatedToOther && currentUserName && (
-    task.created_by_name === currentUserName ||
-    (task.created_by_name && task.created_by_name.includes(`(${currentUserName})`))
+  const isMyAssignedTask = Boolean(
+    isDelegatedToOther &&
+    currentUserName &&
+    isSamePerson(task.created_by_name, currentUserName)
   );
 
-  const isAssignedToMe = isDelegatedToOther && currentUserName && (
-    task.assignee === currentUserName ||
-    (task.assignee && task.assignee.includes(`(${currentUserName})`))
+  const isAssignedToMe = Boolean(
+    isDelegatedToOther &&
+    currentUserName &&
+    isSamePerson(task.assignee, currentUserName)
   );
 
   if (compact) {
     return (
       <Link href={`/tasks/${task.id}`} className="block group">
-        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#151D2A] p-3.5 cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.06)] hover:border-blue-400/50 dark:hover:border-blue-500/40 transition-all duration-200">
+        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#151E2E] p-3.5 cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.06)] hover:border-blue-400/50 dark:hover:border-blue-500/40 transition-all duration-200">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 truncate flex items-center gap-1.5 group-hover:text-[#007AFF] transition-colors">
@@ -168,7 +169,7 @@ export default function TaskCard({ task, compact = false, currentUserName, users
 
   return (
     <Link href={`/tasks/${task.id}`} className="block h-full group">
-      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#151D2A] p-5 cursor-pointer h-full flex flex-col shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.07)] hover:border-blue-400/50 dark:hover:border-blue-500/40 transition-all duration-200">
+      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#151E2E] p-5 cursor-pointer h-full flex flex-col shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.07)] hover:border-blue-400/50 dark:hover:border-blue-500/40 transition-all duration-200">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 leading-snug flex items-center gap-1.5 group-hover:text-[#007AFF] transition-colors">
