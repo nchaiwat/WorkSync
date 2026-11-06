@@ -11,17 +11,17 @@ interface TaskListProps {
   users?: User[];
 }
 
-export default function TaskList({ tasks, loading, title = 'All Tasks', currentUserName, users }: TaskListProps) {
+export default function TaskList({ tasks, loading, title, currentUserName, users }: TaskListProps) {
   if (loading) {
     return (
       <div className="space-y-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="bg-white dark:bg-slate-800 rounded-xl border-2 border-slate-200 dark:border-slate-700 p-5 animate-pulse">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="bg-white dark:bg-[#151D2A] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 animate-pulse shadow-sm">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-slate-700" />
+              <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700" />
               <div className="flex-1">
-                <div className="h-4 w-48 bg-gray-200 dark:bg-slate-700 rounded mb-2" />
-                <div className="h-3 w-32 bg-gray-200 dark:bg-slate-700 rounded" />
+                <div className="h-4 w-48 bg-slate-200 dark:bg-slate-700 rounded mb-2" />
+                <div className="h-3 w-32 bg-slate-200 dark:bg-slate-700 rounded" />
               </div>
             </div>
           </div>
@@ -32,13 +32,13 @@ export default function TaskList({ tasks, loading, title = 'All Tasks', currentU
 
   if (tasks.length === 0) {
     return (
-      <div className="text-center py-16">
-        <div className="text-5xl mb-4">📋</div>
-        <h3 className="text-lg font-bold text-gray-700 dark:text-gray-300 mb-2">
-          No tasks found
+      <div className="text-center py-16 rounded-2xl bg-white dark:bg-[#151D2A] border border-slate-200/80 dark:border-slate-800 p-8 shadow-sm">
+        <div className="text-4xl mb-3">📋</div>
+        <h3 className="text-base font-bold text-slate-800 dark:text-slate-200 mb-1">
+          ไม่พบภารกิจ
         </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          There are no tasks to display right now.
+        <p className="text-xs text-slate-400">
+          ยังไม่มีรายการงานที่จะแสดงผลในขณะนี้
         </p>
       </div>
     );
@@ -46,8 +46,12 @@ export default function TaskList({ tasks, loading, title = 'All Tasks', currentU
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">{title}</h2>
-      <div className="space-y-3">
+      {title && (
+        <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 mb-4 tracking-tight">
+          {title}
+        </h2>
+      )}
+      <div className="space-y-3.5">
         {tasks.map((task) => (
           <TaskCard key={task.id} task={task} currentUserName={currentUserName} users={users} />
         ))}

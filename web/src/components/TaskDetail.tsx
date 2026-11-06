@@ -776,8 +776,13 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
             <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex-shrink-0">
               Assignee
             </span>
-            <div className="text-sm font-medium text-gray-900 dark:text-gray-100 text-right min-w-0">
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-100 text-right min-w-0 flex items-center gap-1.5 justify-end">
               <UserDisplay name={getUserDisplayName(task.assignee)} telegramId={getUserTelegramId(task.assignee)} />
+              {task.created_by_name && task.assignee && task.created_by_name !== task.assignee && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-[#007AFF] font-bold border border-blue-200/60">
+                  🎯 มอบหมายงาน
+                </span>
+              )}
             </div>
           </div>
 
@@ -1062,8 +1067,8 @@ export default function TaskDetail({ task, onUpdate, canEdit = true, isCreator =
           <div className="space-y-3">
             <p className="text-xs text-blue-700 dark:text-blue-300 italic">
               {isCreator
-                ? 'ยังไม่มีอัปเดตงาน — เพิ่มอัปเดตแรกด้านบน'
-                : 'ยังไม่มีอัปเดตงานจากเจ้าของงานเลย'}
+                ? 'ยังไม่มีประวัติการอัปเดตงาน — เริ่มพิมพ์อัปเดตงานด้านบนได้ทันที'
+                : 'ยังไม่มีประวัติการอัปเดตงานจากผู้รับผิดชอบ'}
             </p>
             
             <div className="text-xs font-bold text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-slate-700 pb-1">

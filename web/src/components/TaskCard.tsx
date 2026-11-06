@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import type { Task, User } from '@/types';
 import { STATUS_CONFIG, PROGRESS_COLORS } from '@/types';
 import Link from 'next/link';
@@ -23,9 +22,9 @@ function getLatestUpdateSnippet(latestUpdateText: string | null | undefined): st
 export default function TaskCard({ task, compact = false, currentUserName, users }: TaskCardProps) {
   const isUnread = task.is_unread ?? false;
 
-  const getTelegramId = () => {
+  const getTelegramId = (targetName?: string) => {
     if (!users) return undefined;
-    const nameOrId = task.created_by_name || task.assignee;
+    const nameOrId = targetName || task.assignee || task.created_by_name;
     const user = users.find(u => {
       if (u.id === nameOrId || u.username === nameOrId || u.first_name === nameOrId) return true;
       if (formatUserDisplayName(u) === nameOrId) return true;
@@ -36,9 +35,9 @@ export default function TaskCard({ task, compact = false, currentUserName, users
     return user?.telegram_id || undefined;
   };
 
-  const getAvatarUrl = () => {
+  const getAvatarUrl = (targetName?: string) => {
     if (!users) return task.avatar_url || undefined;
-    const nameOrId = task.created_by_name || task.assignee;
+    const nameOrId = targetName || task.assignee || task.created_by_name;
     const user = users.find(u => {
       if (u.id === nameOrId || u.username === nameOrId || u.first_name === nameOrId) return true;
       if (formatUserDisplayName(u) === nameOrId) return true;
@@ -49,7 +48,7 @@ export default function TaskCard({ task, compact = false, currentUserName, users
     return user?.avatar_url || task.avatar_url || undefined;
   };
 
-  const statusConfig = STATUS_CONFIG[task.status];
+  const statusConfig = STATUS_CONFIG[task.status] || STATUS_CONFIG.todo;
   const progressColor =
     task.progress === 100
       ? PROGRESS_COLORS.complete
@@ -73,95 +72,94 @@ export default function TaskCard({ task, compact = false, currentUserName, users
     }
     
     if (diffDays > 0) {
-      return { text: `อีก ${diffDays} วัน`, colorClass: 'text-gray-500 dark:text-gray-400' };
+      return { text: `อีก ${diffDays} วัน`, colorClass: 'text-slate-500 dark:text-slate-400' };
     } else if (diffDays === 0) {
       return { text: 'วันนี้', colorClass: 'text-amber-600 dark:text-amber-400 font-bold' };
     } else {
-      return { text: `เกินกำหนด ${Math.abs(diffDays)} วัน`, colorClass: 'text-red-500 dark:text-red-400 font-bold' };
+      return { text: `เกินกำหนด ${Math.abs(diffDays)} วัน`, colorClass: 'text-rose-500 dark:text-rose-400 font-bold' };
     }
   })();
-
-  const statusBorders = {
-    todo: 'border-l-slate-400 dark:border-l-slate-500',
-    in_progress: 'border-l-blue-500 dark:border-l-blue-400',
-    review: 'border-l-amber-500 dark:border-l-amber-400',
-    done: 'border-l-emerald-500 dark:border-l-emerald-400',
-  };
-  const statusBorder = statusBorders[task.status] || 'border-l-slate-400';
 
   const isManager = currentUserName && (
     task.manager === currentUserName ||
     (task.manager && task.manager.includes(`(${currentUserName})`))
   );
 
+  // Check if this task was delegated to someone else
+  const isDelegatedToOther = task.created_by_name && task.assignee && (
+    task.created_by_name !== task.assignee &&
+    !task.assignee.includes(task.created_by_name)
+  );
+
+  const isMyAssignedTask = isDelegatedToOther && currentUserName && (
+    task.created_by_name === currentUserName ||
+    (task.created_by_name && task.created_by_name.includes(`(${currentUserName})`))
+  );
+
+  const isAssignedToMe = isDelegatedToOther && currentUserName && (
+    task.assignee === currentUserName ||
+    (task.assignee && task.assignee.includes(`(${currentUserName})`))
+  );
+
   if (compact) {
     return (
-      <Link href={`/tasks/${task.id}`} className="block">
-        <div className={`task-card ${
-          isManager 
-            ? 'bg-indigo-50/15 dark:bg-slate-800/40 border-indigo-300/80 dark:border-indigo-900/60' 
-            : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700'
-        } rounded-lg border-2 border-l-4 ${statusBorder} p-3 cursor-pointer shadow-sm`}>
+      <Link href={`/tasks/${task.id}`} className="block group">
+        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#151D2A] p-3.5 cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.06)] hover:border-blue-400/50 dark:hover:border-blue-500/40 transition-all duration-200">
           <div className="flex items-start justify-between gap-2">
-            <div>
-              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate flex items-center gap-1.5">
+            <div className="flex-1 min-w-0">
+              <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 truncate flex items-center gap-1.5 group-hover:text-[#007AFF] transition-colors">
                 {isUnread && (
                   <span className="relative flex h-2 w-2 flex-shrink-0" title="มีอัปเดตใหม่">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
                   </span>
                 )}
                 {task.title}
               </h4>
-              {task.project_owner && (
-                <div className="text-[10px] text-indigo-650 dark:text-indigo-400 font-semibold mt-0.5">
-                  📂 {task.project_owner}
-                </div>
-              )}
+              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                {task.project_owner && (
+                  <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
+                    📂 {task.project_owner}
+                  </span>
+                )}
+                {isMyAssignedTask && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-blue-50 dark:bg-blue-950/60 text-[#007AFF] font-bold border border-blue-200/60 dark:border-blue-800/40">
+                    🎯 มอบหมายให้: {task.assignee}
+                  </span>
+                )}
+                {isAssignedToMe && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-200/60 dark:border-emerald-800/40">
+                    👔 ได้รับมอบหมาย
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
               {isManager && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/80 text-indigo-750 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800 shadow-sm whitespace-nowrap">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-300 font-bold border border-indigo-200/60 dark:border-indigo-800">
                   👑 Manager
                 </span>
               )}
-              <span className={`text-xs px-2 py-0.5 rounded-full ${statusConfig.bgColor} ${statusConfig.color} whitespace-nowrap`}>
+              <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-semibold ${statusConfig.bgColor} ${statusConfig.color} border border-current/20`}>
                 {statusConfig.label}
               </span>
             </div>
           </div>
-          <div className="mt-2">
-            <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-1.5">
+          <div className="mt-2.5">
+            <div className="w-full bg-slate-100 dark:bg-slate-700/60 rounded-full h-1.5 overflow-hidden">
               <div
-                className={`progress-bar-fill h-1.5 rounded-full ${progressColor}`}
+                className={`progress-bar-fill h-1.5 rounded-full ${progressColor} transition-all duration-300`}
                 style={{ width: `${task.progress}%` }}
               />
             </div>
-            <div className="flex justify-between mt-1">
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-gray-500 dark:text-gray-400">{task.progress}%</span>
-                {task.previous_progress !== undefined && task.progress !== task.previous_progress && (
-                  <span className={`text-[9px] font-bold ${
-                    task.progress > task.previous_progress ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                  }`}>
-                    ({task.progress > task.previous_progress ? '+' : ''}{task.progress - task.previous_progress}%)
-                  </span>
-                )}
-              </div>
+            <div className="flex justify-between items-center mt-1 text-[11px]">
+              <span className="font-semibold text-slate-500 dark:text-slate-400 font-mono">{task.progress}%</span>
               {deadlineDiff && (
-                <span className={`text-xs ${deadlineDiff.colorClass}`}>
+                <span className={deadlineDiff.colorClass}>
                   {deadlineDiff.text}
                 </span>
               )}
             </div>
-            {task.latest_update && (
-              <div className="mt-2 p-2 bg-blue-50/60 dark:bg-blue-900/30 rounded border border-blue-150 dark:border-blue-800">
-                <p className="text-xs text-blue-800 dark:text-blue-300 line-clamp-2">
-                  <span className="font-semibold">Update: </span>
-                  {getLatestUpdateSnippet(task.latest_update)}
-                </p>
-              </div>
-            )}
           </div>
         </div>
       </Link>
@@ -169,126 +167,131 @@ export default function TaskCard({ task, compact = false, currentUserName, users
   }
 
   return (
-    <Link href={`/tasks/${task.id}`} className="block">
-      <div className={`task-card ${
-        isManager 
-          ? 'bg-indigo-50/15 dark:bg-slate-800/40 border-indigo-300/80 dark:border-indigo-900/60' 
-          : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700'
-      } rounded-xl border-2 border-l-4 ${statusBorder} p-5 cursor-pointer h-full flex flex-col hover:shadow-md transition-shadow shadow-sm`}>
+    <Link href={`/tasks/${task.id}`} className="block h-full group">
+      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#151D2A] p-5 cursor-pointer h-full flex flex-col shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.07)] hover:border-blue-400/50 dark:hover:border-blue-500/40 transition-all duration-200">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 leading-tight flex items-center gap-1.5">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 leading-snug flex items-center gap-1.5 group-hover:text-[#007AFF] transition-colors">
               {isUnread && (
                 <span className="relative flex h-2.5 w-2.5 flex-shrink-0" title="มีอัปเดตใหม่">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
                 </span>
               )}
               {task.title}
             </h3>
-            {task.project_owner && (
-              <div className="text-[10px] text-indigo-700 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800/60 mt-1.5 inline-flex items-center gap-1">
-                <span className="text-indigo-400 dark:text-indigo-500 font-semibold">Owner:</span>
-                <span>📂 {task.project_owner}</span>
-              </div>
-            )}
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <div className="flex items-center gap-1.5">
-              {isManager && (
-                <span className="text-[10px] px-2.5 py-1 rounded-full bg-indigo-100 dark:bg-indigo-950/80 text-indigo-750 dark:text-indigo-300 font-extrabold border border-indigo-200 dark:border-indigo-800 shadow-sm whitespace-nowrap">
-                  👑 Manager
+            
+            {/* Tags & Delegation indicators */}
+            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+              {task.project_owner && (
+                <span className="text-[10px] text-indigo-700 dark:text-indigo-300 font-semibold bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-full border border-indigo-200/60 dark:border-indigo-800/50 inline-flex items-center gap-1">
+                  <span>📂</span> {task.project_owner}
                 </span>
               )}
-              <div className="flex flex-col items-end">
-                <span className="text-[9px] text-gray-400 dark:text-gray-500 font-medium uppercase tracking-wide leading-none mb-0.5">Status</span>
-                <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${statusConfig.bgColor} ${statusConfig.color} whitespace-nowrap`}>
-                  {statusConfig.label}
+              {isMyAssignedTask && (
+                <span className="text-[10px] text-blue-700 dark:text-blue-300 font-bold bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-full border border-blue-200/70 dark:border-blue-800/50 inline-flex items-center gap-1">
+                  <span>🎯</span> มอบหมายให้: {task.assignee}
                 </span>
-              </div>
+              )}
+              {isAssignedToMe && (
+                <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-200/70 dark:border-emerald-800/50 inline-flex items-center gap-1">
+                  <span>👔</span> ได้รับมอบหมายจาก: {task.created_by_name || 'หัวหน้างาน'}
+                </span>
+              )}
             </div>
+          </div>
+
+          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+            {isManager && (
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-300 font-bold border border-indigo-200/60 dark:border-indigo-800 shadow-sm whitespace-nowrap">
+                👑 Manager
+              </span>
+            )}
+            <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${statusConfig.bgColor} ${statusConfig.color} border border-current/20 whitespace-nowrap shadow-sm`}>
+              {statusConfig.label}
+            </span>
           </div>
         </div>
 
         {task.description && (
-          <p className="mt-2 text-sm text-gray-505 dark:text-gray-400 line-clamp-2">
+          <p className="mt-2.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
             {task.description}
           </p>
         )}
 
         <div className="mt-4">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Progress</span>
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">ความคืบหน้า</span>
             <div className="flex items-center gap-1.5">
               {task.previous_progress !== undefined && task.progress !== task.previous_progress && (
-                <span className={`text-[10px] font-bold px-1 py-0.2 rounded ${
+                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
                   task.progress > task.previous_progress
-                    ? 'text-green-600 bg-green-50 dark:text-green-400 dark:bg-green-950/20'
-                    : 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950/20'
+                    ? 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/30'
+                    : 'text-rose-600 bg-rose-50 dark:text-rose-400 dark:bg-rose-950/30'
                 }`}>
                   {task.progress > task.previous_progress ? '+' : ''}{task.progress - task.previous_progress}%
                 </span>
               )}
-              <span className="text-xs font-bold text-gray-900 dark:text-gray-100">{task.progress}%</span>
+              <span className="text-xs font-bold text-slate-900 dark:text-slate-100 font-mono">{task.progress}%</span>
             </div>
           </div>
-          <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2">
+          <div className="w-full bg-slate-100 dark:bg-slate-700/60 rounded-full h-2 overflow-hidden">
             <div
-              className={`progress-bar-fill h-2 rounded-full ${progressColor}`}
+              className={`progress-bar-fill h-2 rounded-full ${progressColor} transition-all duration-300`}
               style={{ width: `${task.progress}%` }}
             />
           </div>
+
           {task.latest_update && (
-            <div className="mt-3 p-2.5 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-100 dark:border-blue-850">
-              <p className="text-xs text-blue-800 dark:text-blue-300 line-clamp-2">
-                <span className="font-semibold">Update: </span>
+            <div className="mt-3 p-2.5 bg-blue-50/60 dark:bg-blue-950/30 rounded-xl border border-blue-100 dark:border-blue-900/50">
+              <p className="text-xs text-blue-900 dark:text-blue-300 line-clamp-2 leading-relaxed">
+                <span className="font-bold">อัปเดตล่าสุด: </span>
                 {getLatestUpdateSnippet(task.latest_update)}
               </p>
             </div>
           )}
         </div>
 
-        <div className="mt-auto pt-3 border-t border-gray-100 dark:border-slate-700/50">
-          {/* Row 1: Assignee + Created date */}
+        <div className="mt-auto pt-3.5 border-t border-slate-100 dark:border-slate-800/80">
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              {getAvatarUrl() ? (
+            <div className="flex items-center gap-2 min-w-0">
+              {getAvatarUrl(task.assignee) ? (
                 <img
-                  src={getAvatarUrl()}
-                  alt={task.created_by_name || task.assignee}
-                  className="w-6 h-6 rounded-full object-cover"
+                  src={getAvatarUrl(task.assignee)}
+                  alt={task.assignee}
+                  className="w-6 h-6 rounded-full object-cover flex-shrink-0"
                 />
               ) : (
-                <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold shadow-sm">
-                  {(task.created_by_name || task.assignee).charAt(0).toUpperCase()}
+                <div className="w-6 h-6 rounded-full bg-[#007AFF] flex items-center justify-center text-white text-[10px] font-bold shadow-sm flex-shrink-0">
+                  {task.assignee.charAt(0).toUpperCase()}
                 </div>
               )}
-              <span className="text-xs text-gray-600 dark:text-gray-400 truncate max-w-[120px]">
-                <UserDisplay name={task.created_by_name || task.assignee} size="sm" telegramId={getTelegramId()} />
-              </span>
+              <div className="truncate text-xs text-slate-700 dark:text-slate-300">
+                <UserDisplay name={task.assignee} size="sm" telegramId={getTelegramId(task.assignee)} />
+              </div>
             </div>
             {task.created_at && (
-              <span className="text-[10px] text-gray-400 dark:text-gray-500">
-                เพิ่มเมื่อ {(() => {
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 flex-shrink-0">
+                {(() => {
                   const d = new Date(task.created_at);
                   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
                 })()}
               </span>
             )}
           </div>
-          {/* Row 2: Deadline */}
+
           {deadlineDate && (
-            <div className={`flex items-center justify-end gap-2 text-xs px-2.5 py-1.5 rounded-lg border ${
+            <div className={`flex items-center justify-end gap-1.5 text-xs px-2.5 py-1 rounded-xl border ${
               isDone
                 ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-400'
                 : deadlineDiff && deadlineDiff.text.startsWith('เกิน')
-                  ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/40 text-red-600 dark:text-red-400'
+                  ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/40 text-rose-600 dark:text-rose-400'
                   : deadlineDiff && deadlineDiff.text === 'วันนี้'
                     ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/40 text-amber-700 dark:text-amber-400'
-                    : 'bg-gray-50 dark:bg-slate-700/40 border-gray-200 dark:border-slate-600/40 text-gray-500 dark:text-gray-400'
+                    : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/60 text-slate-500 dark:text-slate-400'
             }`}>
               <span>📅</span>
-              <span className="font-medium">
+              <span className="font-semibold font-mono">
                 {(() => {
                   const d = deadlineDate;
                   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;

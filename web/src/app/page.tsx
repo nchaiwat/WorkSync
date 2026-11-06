@@ -15,13 +15,13 @@ export default function Home() {
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  // Default tab is 'dash', restored from sessionStorage on mount to avoid hydration issues
-  const [filter, setFilter] = useState<'dash' | 'my_tasks' | 'involved_tasks'>('dash');
+  // Tab filter: 'dash' | 'my_tasks' | 'assigned_by_me' | 'involved_tasks'
+  const [filter, setFilter] = useState<'dash' | 'my_tasks' | 'assigned_by_me' | 'involved_tasks'>('dash');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = sessionStorage.getItem('worksync_tab_filter');
-      if (saved === 'my_tasks' || saved === 'involved_tasks' || saved === 'dash') {
+      if (saved === 'my_tasks' || saved === 'involved_tasks' || saved === 'assigned_by_me' || saved === 'dash') {
         setFilter(saved as any);
       }
     }
@@ -226,13 +226,22 @@ export default function Home() {
         // "งานของฉัน" (My Tasks) shows tasks where I am the assignee
         const filtered = activeTasks.filter((t) => isUserMatch(t.assignee));
         setTasks(filtered);
-      } else {
-        // "งานที่เกี่ยวข้อง" (Related Tasks) shows other tasks where I am involved (manager, collaborator, or creator but not assignee)
+      } else if (filter === 'assigned_by_me') {
+        // "งานที่ฉันมอบหมาย" (Assigned by Me) shows tasks where I created or manage the task, but assignee is someone else
         const filtered = activeTasks.filter(
           (t) =>
             !isUserMatch(t.assignee) &&
-            (t.creator_id === currentUser?.id ||
-              isUserMatch(t.manager) ||
+            (t.creator_id === currentUser?.id || isUserMatch(t.created_by_name) || isUserMatch(t.manager))
+        );
+        setTasks(filtered);
+      } else {
+        // "งานที่เกี่ยวข้อง" (Related Tasks) shows other tasks where I am involved (collaborator or manager, but not assignee and not creator)
+        const filtered = activeTasks.filter(
+          (t) =>
+            !isUserMatch(t.assignee) &&
+            t.creator_id !== currentUser?.id &&
+            !isUserMatch(t.created_by_name) &&
+            (isUserMatch(t.manager) ||
               (t.collaborators && t.collaborators.some(col => isUserMatch(col))))
         );
         setTasks(filtered);
@@ -409,10 +418,13 @@ export default function Home() {
   const members = useMemo((): TeamMember[] => {
     const memberMap = new Map<string, Task[]>();
     for (const task of tasks) {
-      const creatorName = task.created_by_name || 'System';
-      const list = memberMap.get(creatorName) || [];
+      // In "Assigned by Me" mode, group columns by the assignee (each team member doing the delegated tasks)
+      const groupKey = filter === 'assigned_by_me'
+        ? (task.assignee || 'ไม่ระบุผู้รับผิดชอบ')
+        : (task.created_by_name || task.assignee || 'System');
+      const list = memberMap.get(groupKey) || [];
       list.push(task);
-      memberMap.set(creatorName, list);
+      memberMap.set(groupKey, list);
     }
     
     return Array.from(memberMap.entries()).map(([name, memberTasks]) => {
@@ -442,10 +454,10 @@ export default function Home() {
   }, [tasks, users]);
 
   return (
-    <div className="min-h-screen">
-      {/* Header */}
-      <header className="bg-white dark:bg-slate-800 border-b-2 border-slate-300 dark:border-slate-700 sticky top-0 z-20 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-3 sm:py-4">
+    <div className="min-h-screen bg-[#F2F2F7] dark:bg-[#0B0F19] text-slate-900 dark:text-slate-100 transition-colors">
+      {/* iOS Translucent Frosted Glass Header */}
+      <header className="sticky top-0 z-30 backdrop-blur-xl bg-white/80 dark:bg-[#151D2A]/85 border-b border-slate-200/80 dark:border-slate-800/80 shadow-[0_1px_8px_rgba(0,0,0,0.02)] transition-colors">
+        <div className="max-w-5xl mx-auto px-4 py-3 sm:py-3.5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {/* Logo and Mobile Avatar Toggle */}
             <div className="flex items-center justify-between w-full sm:w-auto">
@@ -538,47 +550,60 @@ export default function Home() {
               )}
             </div>
 
-            {/* Desktop Navigation & Filters */}
+            {/* iOS-style Segmented Navigation & Filters */}
             <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
-              <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto scrollbar-none pb-1 sm:pb-0">
+              <div className="inline-flex p-1 bg-slate-200/80 dark:bg-slate-800/90 rounded-2xl overflow-x-auto max-w-full shadow-inner scrollbar-none">
                 <button
                   onClick={() => {
                     setFilter('dash');
                     sessionStorage.setItem('worksync_tab_filter', 'dash');
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
                     filter === 'dash'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
-                  📊 Dash
+                  📊 ภาพรวม
                 </button>
                 <button
                   onClick={() => {
                     setFilter('my_tasks');
                     sessionStorage.setItem('worksync_tab_filter', 'my_tasks');
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
                     filter === 'my_tasks'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
-                  งานของฉัน
+                  👤 งานของฉัน
+                </button>
+                <button
+                  onClick={() => {
+                    setFilter('assigned_by_me');
+                    sessionStorage.setItem('worksync_tab_filter', 'assigned_by_me');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+                    filter === 'assigned_by_me'
+                      ? 'bg-[#007AFF] text-white shadow-[0_2px_8px_rgba(0,122,255,0.3)]'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  🎯 งานที่มอบหมาย
                 </button>
                 <button
                   onClick={() => {
                     setFilter('involved_tasks');
                     sessionStorage.setItem('worksync_tab_filter', 'involved_tasks');
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
                     filter === 'involved_tasks'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
-                  งานที่เกี่ยวข้อง
+                  👥 งานเกี่ยวข้อง
                 </button>
               </div>
 
@@ -587,14 +612,14 @@ export default function Home() {
                 <div className="hidden sm:flex items-center gap-3 ml-2">
                   <button
                     onClick={handleExportExcel}
-                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors whitespace-nowrap shadow-sm flex items-center gap-1.5"
-                    title="Export Excel"
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shadow-sm flex items-center gap-1.5 active:scale-95"
+                    title="Export CSV"
                   >
-                    📥 Export Excel
+                    📥 Export
                   </button>
                   <Link
                     href="/tasks/new"
-                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors whitespace-nowrap shadow-sm"
+                    className="px-3.5 py-1.5 bg-[#007AFF] hover:bg-[#0062cc] text-white rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shadow-[0_2px_8px_rgba(0,122,255,0.3)] active:scale-95"
                   >
                     ➕ เพิ่มงาน
                   </Link>
@@ -678,11 +703,11 @@ export default function Home() {
 
 
       {/* Content */}
-      <main className="max-w-4xl mx-auto px-4 py-6">
+      <main className="max-w-5xl mx-auto px-4 py-6 pb-24 sm:pb-8">
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-pulse">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-white dark:bg-slate-800 h-24 rounded-xl border border-slate-200 dark:border-slate-700" />
+              <div key={i} className="bg-white dark:bg-[#151D2A] h-24 rounded-2xl border border-slate-200 dark:border-slate-800" />
             ))}
           </div>
         ) : filter === 'dash' ? (
@@ -691,6 +716,65 @@ export default function Home() {
           <TeamDashboard members={members} loading={isLoading} isMyTasks={filter === 'my_tasks'} />
         )}
       </main>
+
+      {/* iOS Mobile Bottom Tab Bar */}
+      <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 backdrop-blur-xl bg-white/90 dark:bg-[#151D2A]/90 border-t border-slate-200/80 dark:border-slate-800/80 px-2 py-1.5 flex items-center justify-around shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
+        <button
+          onClick={() => {
+            setFilter('dash');
+            sessionStorage.setItem('worksync_tab_filter', 'dash');
+          }}
+          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-[10px] font-semibold transition-colors ${
+            filter === 'dash' ? 'text-[#007AFF]' : 'text-slate-500 dark:text-slate-400'
+          }`}
+        >
+          <span className="text-lg">📊</span>
+          <span>ภาพรวม</span>
+        </button>
+        <button
+          onClick={() => {
+            setFilter('my_tasks');
+            sessionStorage.setItem('worksync_tab_filter', 'my_tasks');
+          }}
+          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-[10px] font-semibold transition-colors ${
+            filter === 'my_tasks' ? 'text-[#007AFF]' : 'text-slate-500 dark:text-slate-400'
+          }`}
+        >
+          <span className="text-lg">👤</span>
+          <span>งานฉัน</span>
+        </button>
+        <Link
+          href="/tasks/new"
+          className="flex flex-col items-center justify-center w-11 h-11 -mt-4 rounded-full bg-[#007AFF] text-white shadow-[0_4px_12px_rgba(0,122,255,0.4)] active:scale-95 transition-transform"
+          title="เพิ่มงานใหม่"
+        >
+          <span className="text-2xl leading-none font-bold">+</span>
+        </Link>
+        <button
+          onClick={() => {
+            setFilter('assigned_by_me');
+            sessionStorage.setItem('worksync_tab_filter', 'assigned_by_me');
+          }}
+          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-[10px] font-semibold transition-colors ${
+            filter === 'assigned_by_me' ? 'text-[#007AFF]' : 'text-slate-500 dark:text-slate-400'
+          }`}
+        >
+          <span className="text-lg">🎯</span>
+          <span>มอบหมาย</span>
+        </button>
+        <button
+          onClick={() => {
+            setFilter('involved_tasks');
+            sessionStorage.setItem('worksync_tab_filter', 'involved_tasks');
+          }}
+          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-[10px] font-semibold transition-colors ${
+            filter === 'involved_tasks' ? 'text-[#007AFF]' : 'text-slate-500 dark:text-slate-400'
+          }`}
+        >
+          <span className="text-lg">👥</span>
+          <span>เกี่ยวข้อง</span>
+        </button>
+      </nav>
 
       {/* PIN Setup Modal */}
       {isPinModalOpen && (

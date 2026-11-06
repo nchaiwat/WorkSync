@@ -11,9 +11,15 @@ export default function NewTaskPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState('');
+  const [currentRawUser, setCurrentRawUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [currentDepartment, setCurrentDepartment] = useState('');
   const [currentPosition, setCurrentPosition] = useState('');
+
+  // Mode: 'self' = งานของฉัน, 'assign' = มอบหมายงานให้ทีม
+  const [taskMode, setTaskMode] = useState<'self' | 'assign'>('self');
+  const [assignedUser, setAssignedUser] = useState('');
+  const [assigneeSearch, setAssigneeSearch] = useState('');
 
   const [formData, setFormData] = useState({
     title: '',
@@ -44,7 +50,7 @@ export default function NewTaskPage() {
       .catch(() => {
         router.push('/login');
       });
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     const name = getAuthFirstName() || getAuthUsername() || 'ไม่ทราบชื่อ';
@@ -55,14 +61,15 @@ export default function NewTaskPage() {
     if (token) {
       api.getUsers().then((data: User[]) => {
         setUsers(data);
-        // Find current user's department
         const me = data.find(u => 
           u.first_name === name || u.username === name
         );
         if (me) {
+          setCurrentRawUser(me);
           setCurrentDepartment(me.department || '');
           setCurrentPosition(me.position || '');
-          setCurrentUser(formatUserDisplayName(me)); // set formatted name as assignee
+          const formatted = formatUserDisplayName(me);
+          setCurrentUser(formatted);
         }
       }).catch(() => {});
     }
@@ -75,7 +82,7 @@ export default function NewTaskPage() {
     if (pos === 'manager') return 3;
     if (pos === 'c-level' || pos === 'c level') return 4;
     if (pos === 'ceo') return 5;
-    return 1; // default fallback
+    return 1;
   };
 
   const isAllowedManager = (managerPosition?: string): boolean => {
@@ -88,7 +95,7 @@ export default function NewTaskPage() {
     if (userRank === 3) {
       return mgrRank >= 3;
     }
-    return mgrRank >= 5; // C-Level and CEO can only choose CEO (Rank 5)
+    return mgrRank >= 5;
   };
 
   // Candidate managers matching the position hierarchy rules
@@ -102,16 +109,44 @@ export default function NewTaskPage() {
     return { sameDept, otherDept };
   }, [users, currentPosition, currentDepartment]);
 
-  // Candidate colleagues (excluding CEO, sorted by department)
+  // Candidate assignees for delegation (excluding CEO, sorted by department and matching search)
+  const candidateAssignees = useMemo(() => {
+    const filtered = users.filter(u => {
+      const isMe = currentRawUser && (u.id === currentRawUser.id || u.username === currentRawUser.username);
+      if (isMe) return false;
+      if (assigneeSearch.trim()) {
+        const q = assigneeSearch.toLowerCase();
+        const display = formatUserDisplayName(u).toLowerCase();
+        const full = `${u.first_name} ${u.last_name} ${u.username} ${u.department || ''}`.toLowerCase();
+        return display.includes(q) || full.includes(q);
+      }
+      return true;
+    });
+
+    if (!currentDepartment) {
+      return { sameDept: filtered, otherDept: [] };
+    }
+    const sameDept = filtered.filter(u => u.department === currentDepartment);
+    const otherDept = filtered.filter(u => u.department !== currentDepartment);
+    return { sameDept, otherDept };
+  }, [users, currentDepartment, currentRawUser, assigneeSearch]);
+
+  // Candidate colleagues (excluding CEO and assigned user)
   const candidateColleagues = useMemo(() => {
-    const valid = users.filter(u => (u.position || '').toLowerCase().trim() !== 'ceo');
+    const valid = users.filter(u => {
+      if ((u.position || '').toLowerCase().trim() === 'ceo') return false;
+      if (taskMode === 'assign' && assignedUser) {
+        if (u.first_name === assignedUser || u.username === assignedUser) return false;
+      }
+      return true;
+    });
     if (!currentDepartment) {
       return { sameDept: valid, otherDept: [] };
     }
     const sameDept = valid.filter(u => u.department === currentDepartment);
     const otherDept = valid.filter(u => u.department !== currentDepartment);
     return { sameDept, otherDept };
-  }, [users, currentDepartment]);
+  }, [users, currentDepartment, taskMode, assignedUser]);
 
   const toggleColleague = (userId: string) => {
     setFormData({
@@ -132,7 +167,6 @@ export default function NewTaskPage() {
     return `${day}/${month}/${year}`;
   };
 
-  // Convert ISO/date string to YYYY-MM-DD (value for input[type=date])
   const toInputDateValue = (deadlineStr: string) => {
     if (!deadlineStr) return '';
     const d = new Date(deadlineStr);
@@ -144,13 +178,37 @@ export default function NewTaskPage() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      // Validate manager exists
-      if (formData.manager) {
-        const managerExists = users.find(u => u.first_name === formData.manager || u.username === formData.manager);
-        if (!managerExists) {
-          alert('Manager ที่เลือกไม่มีตัวตนในระบบ');
+      let finalAssignee = currentUser;
+      let finalManager = '';
+
+      if (taskMode === 'assign') {
+        if (!assignedUser) {
+          alert('กรุณาเลือกผู้รับผิดชอบงานที่ต้องการมอบหมาย');
           setIsSubmitting(false);
           return;
+        }
+
+        const targetUser = users.find(u => u.first_name === assignedUser || u.username === assignedUser || formatUserDisplayName(u) === assignedUser);
+        if (!targetUser) {
+          alert('ผู้รับผิดชอบที่เลือกไม่มีตัวตนในระบบ');
+          setIsSubmitting(false);
+          return;
+        }
+        finalAssignee = formatUserDisplayName(targetUser);
+
+        // When delegating, default manager to current logged-in user
+        if (formData.manager) {
+          const m = users.find(u => u.first_name === formData.manager || u.username === formData.manager);
+          finalManager = m ? formatUserDisplayName(m) : currentUser;
+        } else {
+          finalManager = currentUser;
+        }
+      } else {
+        // Self-created task
+        finalAssignee = currentUser;
+        if (formData.manager) {
+          const m = users.find(u => u.first_name === formData.manager || u.username === formData.manager);
+          if (m) finalManager = formatUserDisplayName(m);
         }
       }
 
@@ -164,13 +222,6 @@ export default function NewTaskPage() {
         }
       }
 
-      // Transform manager to formatted name if set
-      let formattedManager = '';
-      if (formData.manager) {
-        const m = users.find(u => u.first_name === formData.manager || u.username === formData.manager);
-        if (m) formattedManager = formatUserDisplayName(m);
-      }
-
       const formattedColleagues = formData.colleagues.map(colName => {
         const c = users.find(u => u.first_name === colName || u.username === colName);
         return c ? formatUserDisplayName(c) : colName;
@@ -179,8 +230,8 @@ export default function NewTaskPage() {
       await api.createTask({
         title: formData.title,
         description: formData.description,
-        assignee: currentUser,
-        manager: formattedManager,
+        assignee: finalAssignee,
+        manager: finalManager,
         status: formData.status,
         progress: formData.progress,
         deadline: formData.deadline || null,
@@ -188,6 +239,7 @@ export default function NewTaskPage() {
         avatar_url: '',
         project_owner: formData.project_owner || null,
       });
+
       router.push('/');
     } catch (err: any) {
       alert('สร้างงานไม่สำเร็จ: ' + (err?.message || String(err)));
@@ -197,75 +249,127 @@ export default function NewTaskPage() {
   };
 
   return (
-    <div className="min-h-screen">
-      <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <button onClick={() => router.back()} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
-              ← กลับ
-            </button>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-              ➕ เพิ่มงานใหม่
-            </h1>
-            <div className="w-16" />
-          </div>
+    <div className="min-h-screen bg-[#F2F2F7] dark:bg-[#0B0F19] text-slate-900 dark:text-slate-100 pb-16 transition-colors duration-150">
+      {/* iOS Translucent Frosted Glass Header */}
+      <header className="sticky top-0 z-30 backdrop-blur-xl bg-white/80 dark:bg-[#151D2A]/80 border-b border-slate-200/80 dark:border-slate-800/80 transition-colors">
+        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
+          <button
+            onClick={() => router.back()}
+            className="inline-flex items-center gap-1 text-[#007AFF] hover:opacity-80 transition-opacity font-medium text-sm sm:text-base py-1"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+            </svg>
+            <span>กลับ</span>
+          </button>
+          <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+            เพิ่มภารกิจใหม่
+          </h1>
+          <div className="w-12" />
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-6">
+      <main className="max-w-3xl mx-auto px-4 py-6">
+        {/* iOS Native Segmented Control for Task Mode */}
+        <div className="mb-6 flex justify-center">
+          <div className="inline-flex p-1 bg-slate-200/80 dark:bg-slate-800/90 rounded-2xl w-full max-w-md shadow-inner">
+            <button
+              type="button"
+              onClick={() => {
+                setTaskMode('self');
+                setFormData(prev => ({ ...prev, manager: '' }));
+              }}
+              className={`flex-1 py-2 px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-1.5 ${
+                taskMode === 'self'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <span>👤</span>
+              <span>สร้างงานของฉัน</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTaskMode('assign');
+                if (currentRawUser) {
+                  setFormData(prev => ({ ...prev, manager: currentRawUser.first_name || currentRawUser.username }));
+                }
+              }}
+              className={`flex-1 py-2 px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-1.5 ${
+                taskMode === 'assign'
+                  ? 'bg-[#007AFF] text-white shadow-[0_2px_8px_rgba(0,122,255,0.3)]'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <span>🎯</span>
+              <span>มอบหมายงานให้ทีม</span>
+            </button>
+          </div>
+        </div>
+
+        {taskMode === 'assign' && (
+          <div className="mb-6 p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/60 flex items-start gap-3">
+            <span className="text-xl">💡</span>
+            <div className="text-xs sm:text-sm text-blue-900 dark:text-blue-200 leading-relaxed">
+              <span className="font-bold">โหมดมอบหมายงาน:</span> คุณกำลังสร้างงานให้สมาชิกในทีม โดยคุณจะเป็นหัวหน้างาน (Manager) ผู้มอบหมาย และระบบจะส่งการแจ้งเตือนไปยัง Telegram ของผู้รับผิดชอบงานโดยตรง
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Section 1: ข้อมูลโครงการ (Project Details) */}
-          <div className="border-2 border-slate-200 dark:border-slate-700 rounded-2xl p-6 bg-slate-50/10 dark:bg-slate-900/10 space-y-4 shadow-sm">
-            <h3 className="text-sm font-extrabold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <span>📂</span> ข้อมูลโครงการ (Project Details)
+          {/* Section 1: ข้อมูลภารกิจ (Project Details) */}
+          <div className="rounded-2xl bg-white dark:bg-[#151D2A] border border-slate-200/80 dark:border-slate-800/80 shadow-[0_2px_12px_rgba(0,0,0,0.03)] p-5 sm:p-6 space-y-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#007AFF] dark:text-blue-400 flex items-center gap-1.5">
+              <span>📂</span> ข้อมูลโครงการและภารกิจ
             </h3>
             
             {/* Title */}
             <div>
-              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">
-                📌 ชื่องาน <span className="text-red-500">*</span>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                📌 หัวข้องาน <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 required
                 value={formData.title}
                 onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                className="w-full px-3 py-2.5 border-2 border-slate-350 dark:border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 transition-colors focus:outline-none shadow-sm"
-                placeholder="เช่น พัฒนาฟีเจอร์ใหม่"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-800/60 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#007AFF] focus:bg-white dark:focus:bg-slate-800 transition-all text-sm"
+                placeholder="เช่น ปรับปรุงระบบสต็อกสินค้า Phase 2"
               />
             </div>
 
             {/* Description */}
             <div>
-              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">
-                💬 รายละเอียด
+              <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                💬 รายละเอียดงาน
               </label>
               <textarea
                 value={formData.description}
                 onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                className="w-full px-3 py-2.5 border-2 border-slate-355 dark:border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 transition-colors focus:outline-none shadow-sm"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-800/60 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#007AFF] focus:bg-white dark:focus:bg-slate-800 transition-all text-sm"
                 rows={3}
-                placeholder="รายละเอียดงาน..."
+                placeholder="ระบุข้อกำหนด ขอบเขตงาน หรือผลลัพธ์ที่ต้องการ..."
               />
             </div>
 
             {/* Project Owner */}
             <div>
-              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">
-                👑 Project Owner (เจ้าของโครงการ)
+              <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                👑 Project Owner (เจ้าของโครงการ/ฝ่ายที่ขอ)
               </label>
               <input
                 type="text"
                 list="new-project-owners"
                 value={formData.project_owner}
                 onChange={e => setFormData(prev => ({ ...prev, project_owner: e.target.value }))}
-                className="w-full px-3 py-2.5 border-2 border-slate-355 dark:border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 transition-colors focus:outline-none shadow-sm"
-                placeholder="เช่น Phatta/AC, IT, บัญชี"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-800/60 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#007AFF] focus:bg-white dark:focus:bg-slate-800 transition-all text-sm"
+                placeholder="เช่น IT, ฝ่ายขาย, ลูกค้าภายนอก"
               />
               <datalist id="new-project-owners">
                 {users.map(u => {
                   const displayName = formatUserDisplayName(u);
-                  const hint = `${u.first_name} ${u.last_name} (@${u.username})${u.department ? ` — ${u.department}` : ''}${u.position ? ` (${u.position})` : ''}`;
+                  const hint = `${u.first_name} ${u.last_name} (@${u.username})${u.department ? ` — ${u.department}` : ''}`;
                   return (
                     <option key={u.id} value={displayName}>
                       {hint}
@@ -277,215 +381,259 @@ export default function NewTaskPage() {
           </div>
 
           {/* Section 2: ผู้เกี่ยวข้องในการดำเนินงาน (People Involved) */}
-          <div className="border-2 border-slate-200 dark:border-slate-700 rounded-2xl p-6 bg-slate-50/10 dark:bg-slate-900/10 space-y-4 shadow-sm">
-            <h3 className="text-sm font-extrabold text-indigo-650 dark:text-indigo-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <span>👥</span> ผู้เกี่ยวข้องในการดำเนินงาน (People Involved)
+          <div className="rounded-2xl bg-white dark:bg-[#151D2A] border border-slate-200/80 dark:border-slate-800/80 shadow-[0_2px_12px_rgba(0,0,0,0.03)] p-5 sm:p-6 space-y-5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+              <span>👥</span> ผู้รับผิดชอบและทีมงาน
             </h3>
 
-            {/* Assignee - Auto-set to current user (read-only) */}
-            <div>
-              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">
-                👤 ผู้รับผิดชอบ
-              </label>
-              <div className="w-full px-3 py-2.5 border-2 border-slate-200 dark:border-slate-600/50 rounded-lg bg-gray-50 dark:bg-slate-700/60 text-gray-800 dark:text-gray-200 shadow-sm font-bold flex items-center gap-2">
-                <span>👤</span> {currentUser || 'กำลังโหลด...'}
+            {/* Assignee Selection */}
+            {taskMode === 'self' ? (
+              <div>
+                <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  👤 ผู้รับผิดชอบงาน
+                </label>
+                <div className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/70 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 font-semibold text-sm flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/60 text-[#007AFF] dark:text-blue-300 font-bold flex items-center justify-center text-xs">
+                    {currentUser.charAt(0)}
+                  </div>
+                  <span>{currentUser || 'กำลังโหลด...'}</span>
+                  <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/50 text-[#007AFF] border border-blue-200/60 dark:border-blue-900/40">
+                    งานตัวเอง
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div>
+                <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  🎯 เลือกผู้รับผิดชอบงาน (Assignee) <span className="text-rose-500">*</span>
+                </label>
+                <div className="space-y-2">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={assigneeSearch}
+                      onChange={e => setAssigneeSearch(e.target.value)}
+                      placeholder="🔍 ค้นหาชื่อ นามสกุล ชื่อเล่น หรือแผนก..."
+                      className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-800/60 text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                    />
+                    <span className="absolute left-3 top-2.5 text-xs text-slate-400">🔍</span>
+                  </div>
 
-            {/* Manager - Dropdown */}
+                  <select
+                    value={assignedUser}
+                    onChange={e => setAssignedUser(e.target.value)}
+                    required={taskMode === 'assign'}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#007AFF] text-sm cursor-pointer shadow-sm"
+                  >
+                    <option value="">-- เลือกผู้รับผิดชอบงาน --</option>
+                    {candidateAssignees.sameDept.length > 0 && (
+                      <optgroup label={`คนในแผนก ${currentDepartment || 'เดียวกัน'}`}>
+                        {candidateAssignees.sameDept.map(u => (
+                          <option key={u.id} value={u.first_name || u.username}>
+                            {u.nickname ? `${u.nickname} ` : ''}({u.first_name}) {u.last_name} — {u.position || 'Staff'}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {candidateAssignees.otherDept.length > 0 && (
+                      <optgroup label="แผนกอื่น ๆ ในองค์กร">
+                        {candidateAssignees.otherDept.map(u => (
+                          <option key={u.id} value={u.first_name || u.username}>
+                            {u.nickname ? `${u.nickname} ` : ''}({u.first_name}) {u.last_name} — {u.department || 'ทั่วไป'} ({u.position || 'Staff'})
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Manager Selection */}
             <div>
-              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">
-                👔 Manager (หัวหน้า)
+              <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                👔 Manager (หัวหน้างาน / ผู้มอบหมาย)
               </label>
-              <select
-                value={formData.manager}
-                onChange={e => setFormData(prev => ({ ...prev, manager: e.target.value }))}
-                className="w-full px-3 py-2.5 border-2 border-slate-355 dark:border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 transition-colors focus:outline-none shadow-sm cursor-pointer"
-              >
-                <option value="">-- ไม่กำหนด --</option>
-                {candidateManagers.sameDept.map(u => (
-                  <option key={u.id} value={u.first_name || u.username}>
-                    {u.first_name} {u.last_name} (@{u.username})
-                    {u.department ? ` — ${u.department}` : ''}
-                    {u.position ? ` (${u.position})` : ''}
-                  </option>
-                ))}
-                {candidateManagers.sameDept.length > 0 && candidateManagers.otherDept.length > 0 && (
-                  <option disabled className="text-gray-400 dark:text-gray-500">
-                    ──────────────────── คนแผนกอื่น ────────────────────
-                  </option>
-                )}
-                {candidateManagers.otherDept.map(u => (
-                  <option key={u.id} value={u.first_name || u.username}>
-                    {u.first_name} {u.last_name} (@{u.username})
-                    {u.department ? ` — ${u.department}` : ''}
-                    {u.position ? ` (${u.position})` : ''}
-                  </option>
-                ))}
-              </select>
-              {currentDepartment && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                  แสดงเฉพาะคนในแผนก {currentDepartment} ก่อน
-                </p>
+              {taskMode === 'assign' ? (
+                <div className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/70 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 font-semibold text-sm flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">👔</span>
+                    <span>{currentUser}</span>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-900/40">
+                    ผู้มอบหมายงาน
+                  </span>
+                </div>
+              ) : (
+                <select
+                  value={formData.manager}
+                  onChange={e => setFormData(prev => ({ ...prev, manager: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#007AFF] text-sm cursor-pointer shadow-sm"
+                >
+                  <option value="">-- ไม่กำหนด / รายงานตรง --</option>
+                  {candidateManagers.sameDept.map(u => (
+                    <option key={u.id} value={u.first_name || u.username}>
+                      {u.first_name} {u.last_name} (@{u.username})
+                      {u.department ? ` — ${u.department}` : ''}
+                      {u.position ? ` (${u.position})` : ''}
+                    </option>
+                  ))}
+                  {candidateManagers.sameDept.length > 0 && candidateManagers.otherDept.length > 0 && (
+                    <option disabled className="text-slate-400">
+                      ──────── คนแผนกอื่น ────────
+                    </option>
+                  )}
+                  {candidateManagers.otherDept.map(u => (
+                    <option key={u.id} value={u.first_name || u.username}>
+                      {u.first_name} {u.last_name} (@{u.username})
+                      {u.department ? ` — ${u.department}` : ''}
+                      {u.position ? ` (${u.position})` : ''}
+                    </option>
+                  ))}
+                </select>
               )}
             </div>
 
-            {/* Colleagues - Checkboxes */}
+            {/* Colleagues / Collaborators */}
             <div>
-              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">
-                🤝 เพื่อนร่วมงาน (Colleagues)
+              <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                🤝 เพื่อนร่วมงานที่ช่วยเหลือ (Collaborators)
               </label>
-              <div className="max-h-48 overflow-y-auto border-2 border-slate-300 dark:border-slate-600 rounded-lg p-3 bg-white dark:bg-slate-700 shadow-inner">
-                {candidateColleagues.sameDept.length === 0 && candidateColleagues.otherDept.length === 0 ? (
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
-                    ยังไม่มีผู้ใช้ในระบบ
-                  </p>
-                ) : (
-                  <>
-                    {candidateColleagues.sameDept.map(u => (
-                      <label key={u.id} className="flex items-center gap-2 py-1 hover:bg-gray-50 dark:hover:bg-slate-600/30 rounded px-1 transition-colors cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.colleagues.includes(u.first_name || u.username)}
-                          onChange={() => toggleColleague(u.first_name || u.username)}
-                          className="rounded border-gray-300"
-                        />
-                        <span className="text-sm text-gray-900 dark:text-gray-100 font-medium">
-                          {u.first_name} {u.last_name} (@{u.username})
-                          {u.position && <span className="text-xs text-gray-550"> — {u.position}</span>}
-                        </span>
-                      </label>
-                    ))}
-                    
-                    {candidateColleagues.sameDept.length > 0 && candidateColleagues.otherDept.length > 0 && (
-                      <div className="border-t border-dashed border-gray-300 dark:border-slate-600 my-2 pt-2 text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                        คนแผนกอื่น
-                      </div>
-                    )}
-
-                    {candidateColleagues.otherDept.map(u => (
-                      <label key={u.id} className="flex items-center gap-2 py-1 hover:bg-gray-50 dark:hover:bg-slate-600/30 rounded px-1 transition-colors cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.colleagues.includes(u.first_name || u.username)}
-                          onChange={() => toggleColleague(u.first_name || u.username)}
-                          className="rounded border-gray-300"
-                        />
-                        <span className="text-sm text-gray-900 dark:text-gray-100 font-medium">
-                          {u.first_name} {u.last_name} (@{u.username})
-                          {u.department && (
-                            <span className="text-xs text-gray-450"> ({u.department})</span>
-                          )}
-                          {u.position && <span className="text-xs text-gray-550"> — {u.position}</span>}
-                        </span>
-                      </label>
-                    ))}
-                  </>
+              <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700/80 p-3 bg-slate-50/40 dark:bg-slate-800/40 space-y-1">
+                {candidateColleagues.sameDept.map(u => (
+                  <label key={u.id} className="flex items-center gap-2.5 py-1.5 px-2 hover:bg-white dark:hover:bg-slate-700/50 rounded-lg transition-colors cursor-pointer text-xs sm:text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.colleagues.includes(u.first_name || u.username)}
+                      onChange={() => toggleColleague(u.first_name || u.username)}
+                      className="rounded border-slate-300 text-[#007AFF] focus:ring-[#007AFF] w-4 h-4"
+                    />
+                    <span className="font-medium text-slate-800 dark:text-slate-200">
+                      {u.nickname ? `${u.nickname} ` : ''}({u.first_name}) {u.last_name}
+                      {u.position && <span className="text-xs text-slate-500 font-normal"> — {u.position}</span>}
+                    </span>
+                  </label>
+                ))}
+                {candidateColleagues.otherDept.length > 0 && (
+                  <div className="border-t border-slate-200 dark:border-slate-700 my-2 pt-2 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                    แผนกอื่น ๆ
+                  </div>
                 )}
+                {candidateColleagues.otherDept.map(u => (
+                  <label key={u.id} className="flex items-center gap-2.5 py-1.5 px-2 hover:bg-white dark:hover:bg-slate-700/50 rounded-lg transition-colors cursor-pointer text-xs sm:text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.colleagues.includes(u.first_name || u.username)}
+                      onChange={() => toggleColleague(u.first_name || u.username)}
+                      className="rounded border-slate-300 text-[#007AFF] focus:ring-[#007AFF] w-4 h-4"
+                    />
+                    <span className="font-medium text-slate-800 dark:text-slate-200">
+                      {u.nickname ? `${u.nickname} ` : ''}({u.first_name}) {u.last_name}
+                      {u.department && <span className="text-xs text-slate-500 font-normal"> ({u.department})</span>}
+                    </span>
+                  </label>
+                ))}
               </div>
             </div>
           </div>
 
           {/* Section 3: การวัดผลและกำหนดส่ง (Status & Deadline) */}
-          <div className="border-2 border-slate-200 dark:border-slate-700 rounded-2xl p-6 bg-slate-50/10 dark:bg-slate-900/10 space-y-4 shadow-sm">
-            <h3 className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <span>⚙️</span> การวัดผลและกำหนดส่ง (Status & Deadline)
+          <div className="rounded-2xl bg-white dark:bg-[#151D2A] border border-slate-200/80 dark:border-slate-800/80 shadow-[0_2px_12px_rgba(0,0,0,0.03)] p-5 sm:p-6 space-y-5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+              <span>⚙️</span> การวัดผลและกำหนดส่ง (Status & Schedule)
             </h3>
 
-            {/* Status + Progress */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-                  🔄 สถานะ
-                </label>
-                <div className="flex gap-2">
-                  {(['todo', 'in_progress', 'review', 'done'] as const).map((status) => {
-                    const active = formData.status === status;
-                    const config = STATUS_CONFIG[status];
-                    return (
-                      <button
-                        key={status}
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, status }))}
-                        className={`flex-1 py-2 text-xs font-semibold rounded-lg border-2 transition-all ${
-                          active
-                            ? `${config.bgColor} ${config.color} border-primary-500 shadow-sm`
-                            : 'bg-white dark:bg-slate-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-600 hover:border-gray-300 dark:hover:border-slate-500'
-                        }`}
-                      >
-                        {config.label}
-                      </button>
-                    );
-                  })}
-                </div>
+            {/* Status Pills */}
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">
+                🔄 สถานะเริ่มต้น
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(['todo', 'in_progress', 'review', 'done'] as const).map((status) => {
+                  const active = formData.status === status;
+                  const config = STATUS_CONFIG[status];
+                  return (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, status }))}
+                      className={`py-2 px-3 text-xs font-semibold rounded-xl border transition-all text-center flex items-center justify-center gap-1.5 ${
+                        active
+                          ? `${config.bgColor} ${config.color} border-[#007AFF] shadow-sm font-bold`
+                          : 'bg-slate-50/70 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      {config.label}
+                    </button>
+                  );
+                })}
               </div>
-              <div>
-                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-                  📈 ความคืบหน้า ({formData.progress}%)
+            </div>
+
+            {/* Progress Slider */}
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <label className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  📈 ความคืบหน้าเริ่มต้น
                 </label>
-                <div className="flex items-center gap-4 mt-2 h-10">
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={formData.progress}
-                    onChange={e => setFormData(prev => ({ ...prev, progress: parseInt(e.target.value) || 0 }))}
-                    className="w-full h-2 bg-gray-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-primary-500 focus:outline-none"
-                  />
-                </div>
+                <span className="text-sm font-bold text-[#007AFF] font-mono">
+                  {formData.progress}%
+                </span>
               </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={formData.progress}
+                onChange={e => setFormData(prev => ({ ...prev, progress: parseInt(e.target.value) || 0 }))}
+                className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#007AFF] focus:outline-none"
+              />
             </div>
 
             {/* Deadline */}
             <div>
-              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">
-                📅 กำหนดส่ง
+              <label className="block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                📅 กำหนดส่ง (Deadline)
               </label>
               <div className="relative">
-                {/* Visible overlay showing dd/mm/yyyy */}
-                <div
-                  className="absolute inset-0 flex items-center px-3 pointer-events-none z-10 rounded-lg"
-                >
-                  <span className={formData.deadline ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}>
-                    {formData.deadline ? getDisplayDeadline(formData.deadline) : 'dd/mm/yyyy'}
+                <div className="absolute inset-0 flex items-center px-3.5 pointer-events-none z-10 rounded-xl">
+                  <span className={formData.deadline ? 'text-slate-900 dark:text-slate-100 font-medium text-sm' : 'text-slate-400 text-sm'}>
+                    {formData.deadline ? getDisplayDeadline(formData.deadline) : 'เลือกวันกำหนดส่ง...'}
                   </span>
-                  <span className="ml-auto text-lg">📅</span>
+                  <span className="ml-auto text-base">📅</span>
                 </div>
-                {/* Native date input — full-area clickable, visually hidden by opacity but NOT pointer-events:none */}
                 <input
                   type="date"
                   value={toInputDateValue(formData.deadline)}
                   onChange={e => {
                     const val = e.target.value;
                     if (val) {
-                      // Parse as local date to avoid timezone shift
                       const [y, m, d] = val.split('-').map(Number);
-                      const local = new Date(y, m - 1, d, 12, 0, 0); // noon to avoid DST
+                      const local = new Date(y, m - 1, d, 12, 0, 0);
                       setFormData(prev => ({ ...prev, deadline: local.toISOString() }));
                     } else {
                       setFormData(prev => ({ ...prev, deadline: '' }));
                     }
                   }}
-                  style={{ colorScheme: 'auto', WebkitAppearance: 'none' } as React.CSSProperties}
-                  className="w-full px-3 py-2.5 border-2 border-slate-300 dark:border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg bg-white dark:bg-slate-700 text-transparent dark:text-transparent shadow-sm cursor-pointer focus:outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800 text-transparent shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
                 />
               </div>
             </div>
           </div>
 
-          {/* Buttons */}
-          <div className="flex gap-3 pt-4">
+          {/* Action Buttons */}
+          <div className="flex gap-3 pt-2">
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-2.5 rounded-lg font-bold transition-colors shadow-md"
+              className="flex-1 bg-[#007AFF] hover:bg-[#0062cc] disabled:opacity-50 text-white py-3 rounded-2xl font-bold text-sm sm:text-base transition-all shadow-[0_4px_14px_rgba(0,122,255,0.3)] active:scale-[0.98]"
             >
-              {isSubmitting ? 'กำลังสร้าง...' : '➕ สร้างงาน'}
+              {isSubmitting ? 'กำลังบันทึก...' : taskMode === 'assign' ? '🎯 มอบหมายงานนี้' : '➕ สร้างงานของฉัน'}
             </button>
             <button
               type="button"
               onClick={() => router.back()}
-              className="px-6 py-2.5 border-2 border-gray-300 dark:border-slate-600 rounded-lg text-gray-750 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 font-bold transition-colors shadow-sm"
+              className="px-6 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
             >
               ยกเลิก
             </button>

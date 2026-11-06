@@ -160,44 +160,112 @@ export class TasksService {
       },
     });
 
-    // ── Notify Manager & Colleagues in the background ──
-    this.getTaskNotifyIds(task)
-      .then(async (notifyIds) => {
-        if (notifyIds.length > 0) {
-          const deadlineStr = task.deadline
-            ? task.deadline.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })
-            : 'ไม่กำหนด';
+    // ── Smart Telegram Notification (Assignee / Manager / Collaborators) ──
+    (async () => {
+      try {
+        const creator = task.createdBy
+          ? await this.usersService.findOneById(task.createdBy).catch(() => null)
+          : null;
+        const creatorDisplayName = creator
+          ? (() => {
+              const nick = creator.nickname ? `${creator.nickname} ` : '';
+              const first = creator.firstName || creator.username || '';
+              const dept = creator.department || 'IT';
+              return `${nick}(${first})/${dept}`;
+            })()
+          : 'หัวหน้างาน / ผู้มอบหมาย';
 
-          const collabList = (() => {
-            try { return Array.isArray(task.collaborators) ? task.collaborators : JSON.parse(task.collaborators as string); }
-            catch { return []; }
-          })();
+        const isSelfTask = creator && (
+          task.assignee === creator.firstName ||
+          task.assignee === creator.username ||
+          task.assignee === `${creator.firstName} ${creator.lastName}` ||
+          (creator.firstName && task.assignee.includes(`(${creator.firstName})`)) ||
+          (creator.username && task.assignee.includes(`(${creator.username})`)) ||
+          (creator.nickname && task.assignee.startsWith(creator.nickname))
+        );
 
-          const message =
-            `${notifyHeader()}\n` +
-            `🆕 <b>มีงานใหม่ที่เกี่ยวข้องกับคุณ!</b>\n\n` +
-            `📌 <b>หัวข้อ:</b> ${task.title}\n` +
-            `👤 <b>ผู้รับผิดชอบ:</b> ${task.assignee}\n` +
-            `📊 <b>Progress:</b> ${task.progress}%\n` +
-            (task.manager ? `👔 <b>Manager:</b> ${task.manager}\n` : '') +
-            (collabList.length > 0 ? `👥 <b>เพื่อนร่วมงาน:</b> ${collabList.join(', ')}\n` : '') +
-            `📅 <b>กำหนดส่ง:</b> ${deadlineStr}\n` +
-            `⚙️ <b>สถานะ:</b> ${STATUS_LABELS[task.status] || task.status}`;
+        const deadlineStr = task.deadline
+          ? task.deadline.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })
+          : 'ไม่กำหนด';
 
-          await this.telegramService.broadcastNotification(notifyIds, message);
+        const collabList = (() => {
+          try { return Array.isArray(task.collaborators) ? task.collaborators : JSON.parse(task.collaborators as string); }
+          catch { return []; }
+        })();
+
+        if (!isSelfTask) {
+          // 1. Notify Assignee that a task was assigned to them
+          const assigneeIds = await this.resolveTelegramIds([task.assignee]);
+          if (assigneeIds.length > 0) {
+            const assignMessage =
+              `${notifyHeader()}\n` +
+              `🎯 <b>คุณได้รับมอบหมายงานใหม่!</b>\n\n` +
+              `📌 <b>หัวข้อ:</b> ${task.title}\n` +
+              `👔 <b>ผู้มอบหมาย:</b> ${creatorDisplayName}\n` +
+              `👤 <b>ผู้รับผิดชอบ:</b> ${task.assignee}\n` +
+              `📊 <b>Progress:</b> ${task.progress}%\n` +
+              (task.manager ? `👔 <b>Manager:</b> ${task.manager}\n` : '') +
+              (collabList.length > 0 ? `👥 <b>เพื่อนร่วมงาน:</b> ${collabList.join(', ')}\n` : '') +
+              `📅 <b>กำหนดส่ง:</b> ${deadlineStr}\n` +
+              `⚙️ <b>สถานะ:</b> ${STATUS_LABELS[task.status] || task.status}`;
+
+            await this.telegramService.broadcastNotification(assigneeIds, assignMessage);
+          }
+
+          // 2. Notify collaborators & manager (excluding assignee and creator)
+          const otherNames: string[] = [];
+          if (task.manager) otherNames.push(task.manager);
+          otherNames.push(...collabList);
+          const otherIds = (await this.resolveTelegramIds(otherNames)).filter(
+            id => !assigneeIds.includes(id) && id !== creator?.telegramId
+          );
+
+          if (otherIds.length > 0) {
+            const teamMessage =
+              `${notifyHeader()}\n` +
+              `📋 <b>มีการมอบหมายงานใหม่ในทีม!</b>\n\n` +
+              `📌 <b>หัวข้อ:</b> ${task.title}\n` +
+              `👔 <b>ผู้มอบหมาย:</b> ${creatorDisplayName}\n` +
+              `👤 <b>ผู้รับผิดชอบ:</b> ${task.assignee}\n` +
+              `📊 <b>Progress:</b> ${task.progress}%\n` +
+              (task.manager ? `👔 <b>Manager:</b> ${task.manager}\n` : '') +
+              (collabList.length > 0 ? `👥 <b>เพื่อนร่วมงาน:</b> ${collabList.join(', ')}\n` : '') +
+              `📅 <b>กำหนดส่ง:</b> ${deadlineStr}\n` +
+              `⚙️ <b>สถานะ:</b> ${STATUS_LABELS[task.status] || task.status}`;
+
+            await this.telegramService.broadcastNotification(otherIds, teamMessage);
+          }
+        } else {
+          // Self-created task: notify Manager & Colleagues
+          const notifyIds = await this.getTaskNotifyIds(task);
+          if (notifyIds.length > 0) {
+            const message =
+              `${notifyHeader()}\n` +
+              `🆕 <b>มีงานใหม่ที่เกี่ยวข้องกับคุณ!</b>\n\n` +
+              `📌 <b>หัวข้อ:</b> ${task.title}\n` +
+              `👤 <b>ผู้รับผิดชอบ:</b> ${task.assignee}\n` +
+              `📊 <b>Progress:</b> ${task.progress}%\n` +
+              (task.manager ? `👔 <b>Manager:</b> ${task.manager}\n` : '') +
+              (collabList.length > 0 ? `👥 <b>เพื่อนร่วมงาน:</b> ${collabList.join(', ')}\n` : '') +
+              `📅 <b>กำหนดส่ง:</b> ${deadlineStr}\n` +
+              `⚙️ <b>สถานะ:</b> ${STATUS_LABELS[task.status] || task.status}`;
+
+            await this.telegramService.broadcastNotification(notifyIds, message);
+          }
         }
-      })
-      .catch((err) => {
+      } catch (err: any) {
         console.error(`Failed to send Telegram notification for new task: ${err.message}`);
-      });
+      }
+    })();
 
     return task;
   }
 
-  async findAll(filters?: { status?: string; assignee?: string; isArchived?: boolean }): Promise<any[]> {
+  async findAll(filters?: { status?: string; assignee?: string; isArchived?: boolean; createdBy?: string }): Promise<any[]> {
     const whereClause: any = {};
     if (filters?.status) whereClause.status = filters.status;
     if (filters?.assignee) whereClause.assignee = filters.assignee;
+    if (filters?.createdBy) whereClause.createdBy = filters.createdBy;
     
     // Default isArchived to false unless explicitly filtered
     whereClause.isArchived = filters?.isArchived !== undefined ? filters.isArchived : false;

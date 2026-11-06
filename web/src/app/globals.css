@@ -1,61 +1,70 @@
-@import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* บังคับใช้ font ภาษาไทยกับทุก elements */
-*, *::before, *::after {
-  font-family: 'Prompt', sans-serif !important;
-}
-
-html, body {
-  font-family: 'Prompt', sans-serif !important;
-}
-
 :root {
-  --background: #f1f5f9; /* Slate 100 for rich contrast with white cards */
-  --foreground: #0f172a;
-  --card-bg: #ffffff;
-  --card-border: #cbd5e1; /* Slate 300 for pro defined borders */
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
+  --background: #F2F2F7; /* Apple iOS System Grouped Background */
+  --foreground: #1C1C1E;
+  --card-bg: #FFFFFF;
+  --card-border: rgba(0, 0, 0, 0.07);
+  --primary: #007AFF; /* Apple System Blue */
+  --primary-hover: #0062CC;
+  --accent-fill: #E5E5EA;
 }
 
 .dark {
-  --background: #0b111e; /* Rich dark navy/slate background */
-  --foreground: #f1f5f9;
-  --card-bg: #1e293b;
-  --card-border: #475569; /* Slate 600 for dark mode borders */
-  --primary: #60a5fa;
-  --primary-hover: #3b82f6;
+  --background: #0B0F19; /* Pure Deep Slate iOS Dark */
+  --foreground: #F2F2F7;
+  --card-bg: #151D2A;
+  --card-border: rgba(255, 255, 255, 0.08);
+  --primary: #0A84FF; /* Apple iOS Dark Blue */
+  --primary-hover: #409CFF;
+  --accent-fill: #1C2433;
 }
 
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html {
   overflow-x: hidden;
   scroll-behavior: smooth;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Prompt", "Inter", system-ui, sans-serif;
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Prompt", "Inter", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
   min-width: 320px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* iOS Smooth Glassmorphism */
+.glass-header {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.dark .glass-header {
+  background: rgba(21, 29, 42, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -63,12 +72,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #94a3b8;
-  border-radius: 3px;
+  background: rgba(148, 163, 184, 0.5);
+  border-radius: 9999px;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #475569;
+  background: rgba(71, 85, 105, 0.5);
 }
 
 /* Progress bar animation */
@@ -77,19 +86,11 @@ body {
 }
 
 .progress-bar-fill {
-  animation: progress-fill 0.5s ease-out;
+  animation: progress-fill 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Card hover effect */
-.task-card {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.task-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 10px -5px rgba(0, 0, 0, 0.04);
-}
-
-.dark .task-card:hover {
-  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.4), 0 4px 10px -5px rgba(0, 0, 0, 0.2);
+/* Subtle tap & active states like iOS */
+button:active {
+  transform: scale(0.98);
+  transition: transform 0.1s ease;
 }

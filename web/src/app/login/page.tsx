@@ -142,9 +142,9 @@ export default function LoginPage() {
 
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-slate-900 px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F2F2F7] dark:bg-[#0B0F19] px-4 transition-colors">
       <div className="w-full max-w-md">
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 border border-slate-100 dark:border-slate-700/60">
+        <div className="bg-white dark:bg-[#151D2A] rounded-3xl shadow-[0_4px_24px_rgba(0,0,0,0.06)] p-8 border border-slate-200/80 dark:border-slate-800">
           {/* Logo */}
           <div className="text-center mb-6">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">🔄 WorkSync</h1>

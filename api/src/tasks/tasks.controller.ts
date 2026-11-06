@@ -106,12 +106,13 @@ export class TasksController {
     const user = req.user as any;
     const status = query?.filter?.status?._eq || query['filter[status][_eq]'];
     const assignee = query?.filter?.assignee?._eq || query['filter[assignee][_eq]'];
+    const createdBy = query?.filter?.created_by?._eq || query['filter[created_by][_eq]'];
     
     // Parse is_archived filter
     const isArchivedQuery = query?.filter?.is_archived?._eq || query['filter[is_archived][_eq]'];
     const isArchived = isArchivedQuery === 'true' || isArchivedQuery === true;
 
-    const tasks = await this.tasksService.findAll({ status, assignee, isArchived });
+    const tasks = await this.tasksService.findAll({ status, assignee, isArchived, createdBy });
     const formatted = await this.formatTasks(tasks, user.id);
 
     return {

@@ -44,22 +44,15 @@ export default function TasksPage() {
       });
 
     api.getUsers().then(setUsers).catch(console.error);
-  }, []);
+  }, [router]);
 
   useEffect(() => {
-    // Read creator from URL query params
     const urlParams = new URLSearchParams(window.location.search);
     const creator = urlParams.get('creator');
     if (creator) {
       setCreatorFilter(creator);
     }
   }, []);
-
-  useEffect(() => {
-    if (currentUser) {
-      loadTasks();
-    }
-  }, [creatorFilter, currentUser]);
 
   const isUserMatch = (taskField: string | null | undefined) => {
     if (!taskField || !currentUser) return false;
@@ -74,8 +67,6 @@ export default function TasksPage() {
     try {
       const result = await api.getTasks();
       
-      // SECURITY: Users should only ever see tasks they created OR are related to.
-      // Exclude archived tasks from list page
       let relatedTasks = result.data.filter(
         (t) =>
           !t.is_archived &&
@@ -85,20 +76,13 @@ export default function TasksPage() {
           (t.collaborators && t.collaborators.some((col) => isUserMatch(col))))
       );
       
-      // Store all related tasks (ignoring status/creator filter) for full Excel export
       setUnfilteredTasks(relatedTasks);
 
       let filtered = [...relatedTasks];
-      // Filter by creator if specified in URL
       if (creatorFilter) {
-        filtered = filtered.filter(t => t.created_by_name === creatorFilter);
+        filtered = filtered.filter(t => t.created_by_name === creatorFilter || t.assignee === creatorFilter);
       }
 
-      // Sort tasks:
-      // 1. Manager first
-      // 2. Assignee second
-      // 3. Collaborator/Creator third
-      // Secondary: updated_at (most recent first)
       filtered.sort((a, b) => {
         const aIsManager = isUserMatch(a.manager);
         const bIsManager = isUserMatch(b.manager);
@@ -122,6 +106,12 @@ export default function TasksPage() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (currentUser) {
+      loadTasks();
+    }
+  }, [creatorFilter, currentUser]);
 
   const handleExportExcel = () => {
     const headers = [
@@ -157,11 +147,11 @@ export default function TasksPage() {
         const progress = `"${t.progress || 0}%"`;
         const assignee = `"${(t.assignee || '').replace(/"/g, '""')}"`;
         const manager = `"${(t.manager || '').replace(/"/g, '""')}"`;
-        const collaborators = `"${(t.collaborators || []).join(', ').replace(/"/g, '""')}"`;
-        const deadline = `"${t.deadline ? new Date(t.deadline).toLocaleDateString('th-TH') : '—'}"`;
+        const collaborators = `"${(t.collaborators || []).join('; ').replace(/"/g, '""')}"`;
+        const deadline = t.deadline ? `"${new Date(t.deadline).toLocaleDateString('th-TH')}"` : '""';
         const createdBy = `"${(t.created_by_name || '').replace(/"/g, '""')}"`;
-        const createdAt = `"${t.created_at ? new Date(t.created_at).toLocaleString('th-TH') : '—'}"`;
-        const updatedAt = `"${t.updated_at ? new Date(t.updated_at).toLocaleString('th-TH') : '—'}"`;
+        const createdAt = t.created_at ? `"${new Date(t.created_at).toLocaleString('th-TH')}"` : '""';
+        const updatedAt = t.updated_at ? `"${new Date(t.updated_at).toLocaleString('th-TH')}"` : '""';
         
         let latestUpdate = t.latest_update || '';
         const sections = latestUpdate.split(/---\r?\n|---/g).map(s => s.trim()).filter(Boolean);
@@ -203,62 +193,70 @@ export default function TasksPage() {
     : tasks.filter(t => t.status === statusFilter);
 
   return (
-    <div className="min-h-screen">
-      <header className="bg-white dark:bg-slate-800 border-b-2 border-slate-300 dark:border-slate-700 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 font-semibold text-sm">
-              ← กลับ
+    <div className="min-h-screen bg-[#F2F2F7] dark:bg-[#0B0F19] text-slate-900 dark:text-slate-100 pb-16 transition-colors">
+      <header className="sticky top-0 z-30 backdrop-blur-xl bg-white/80 dark:bg-[#151D2A]/80 border-b border-slate-200/80 dark:border-slate-800/80">
+        <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
+          <Link href="/" className="inline-flex items-center gap-1 text-[#007AFF] hover:opacity-80 transition-opacity font-medium text-sm sm:text-base">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+            </svg>
+            <span>กลับ</span>
+          </Link>
+          <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate max-w-[200px] sm:max-w-md">
+            {creatorFilter ? `ภารกิจของ ${creatorFilter.match(/^([^\s(]+)/)?.[1] || creatorFilter}` : 'ภารกิจทั้งหมด'}
+          </h1>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportExcel}
+              className="hidden sm:inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold hover:bg-slate-50 transition-colors shadow-sm"
+              title="Export CSV"
+            >
+              📥 CSV
+            </button>
+            <Link
+              href="/tasks/new"
+              className="px-3.5 py-1.5 bg-[#007AFF] hover:bg-[#0062cc] text-white rounded-xl text-xs sm:text-sm font-semibold transition-all shadow-[0_2px_8px_rgba(0,122,255,0.3)] active:scale-95"
+            >
+              ➕ เพิ่มงาน
             </Link>
-            <h1 className="text-xl font-extrabold text-gray-900 dark:text-gray-100">
-              {creatorFilter ? `📋 งานของ ${creatorFilter.match(/^([^\s(]+)/)?.[1] || creatorFilter}` : '📋 งานทั้งหมด'}
-            </h1>
-            <div className="flex items-center gap-2">
-              <Link
-                href="/tasks/new"
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs sm:text-sm font-semibold transition-colors shadow-sm"
-              >
-                ➕ เพิ่มงาน
-              </Link>
-            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-6">
-        {/* Filter */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-none">
-          {['all', 'todo', 'in_progress', 'review', 'done'].map((status) => {
-            const labels: Record<string, string> = {
-              all: 'ทั้งหมด',
-              todo: 'To Do',
-              in_progress: 'Doing',
-              review: 'Review',
-              done: 'Done',
-            };
-            return (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(status)}
-                className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold whitespace-nowrap transition-colors border ${
-                  statusFilter === status
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                    : 'bg-white dark:bg-slate-800 text-slate-650 dark:text-slate-350 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
-                }`}
-              >
-                {labels[status]}
-              </button>
-            );
-          })}
+        {/* iOS-style Pill Status Filter */}
+        <div className="flex gap-1.5 mb-6 overflow-x-auto pb-2 scrollbar-none">
+          {[
+            { id: 'all', label: 'ทั้งหมด' },
+            { id: 'todo', label: 'To Do' },
+            { id: 'in_progress', label: 'Doing' },
+            { id: 'review', label: 'Review' },
+            { id: 'done', label: 'Done' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setStatusFilter(item.id)}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                statusFilter === item.id
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
+                  : 'bg-white dark:bg-[#151D2A] text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-800 hover:border-slate-300'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
 
         {isLoading ? (
-          <div className="text-center py-12">
-            <p className="text-gray-400">กำลังโหลด...</p>
+          <div className="text-center py-16">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-[#007AFF] border-t-transparent" />
+            <p className="text-xs text-slate-400 mt-3 font-medium">กำลังโหลดภารกิจ...</p>
           </div>
         ) : filteredTasks.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-450 dark:text-gray-500">ไม่มีงาน</p>
+          <div className="text-center py-16 rounded-2xl bg-white dark:bg-[#151D2A] border border-slate-200/80 dark:border-slate-800 p-8 shadow-sm">
+            <div className="text-4xl mb-3">📋</div>
+            <h3 className="text-base font-bold text-slate-800 dark:text-slate-200 mb-1">ไม่พบภารกิจ</h3>
+            <p className="text-xs text-slate-400">ยังไม่มีงานในสถานะที่เลือก</p>
           </div>
         ) : (
           <TaskList tasks={filteredTasks} loading={false} currentUserName={currentUser?.name} users={users} />
