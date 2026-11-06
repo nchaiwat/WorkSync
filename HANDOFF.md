@@ -1,23 +1,29 @@
 # WorkSync — Handover & Continuation Guide (HANDOFF.md)
-**อัปเดตล่าสุด:** 1 ตุลาคม 2026  
-**สถานะโปรเจกต์:** Production Ready / Central IAM SSO v2.0.0 (SP-Initiated & IdP-Initiated Portal Launch Supported)
+**อัปเดตล่าสุด:** 6 พฤศจิกายน 2026  
+**สถานะโปรเจกต์:** Production Ready / Enterprise v2.5.0 (Central IAM SSO + Multi-Perspective Dashboard + Real-Time Live Sync + Notification Center + SMTP Email Digest + PWA)
 
 ---
 
 ## 📌 1. ภาพรวมโปรเจกต์ (Project Overview)
 
-**WorkSync** คือระบบบริหารจัดการและติดตามงาน (Task Tracking & Collaboration Platform) แบบ Real-time สำหรับทีมงานภายในองค์กร Window Asia รองรับทั้ง Desktop และ Mobile PWA โดยเชื่อมต่อเข้ากับระบบยืนยันตัวตนกลาง **Window Asia Central IAM** ผ่านมาตรฐาน OAuth 2.0 (PKCE S256) และ JWKS RS256 พร้อมระบบสำรองฉุกเฉิน (Break-Glass Mode) และระบบแจ้งเตือนผ่าน Telegram
+**WorkSync** คือระบบบริหารจัดการและติดตามงาน (Task Tracking & Collaboration Platform) แบบ Real-time ที่พัฒนาขึ้นเพื่อตอบโจทย์การทำงานในองค์กร Window Asia รองรับการใช้งานเต็มรูปแบบทั้งบน **Desktop Web** และ **Mobile PWA (Progressive Web App)** 
+
+ระบบเชื่อมต่อกับระบบยืนยันตัวตนกลาง **Window Asia Central IAM** ผ่านมาตรฐาน OAuth 2.0 (PKCE S256) และ JWKS RS256 พร้อมระบบสำรองฉุกเฉิน (Break-Glass Mode), ระบบแจ้งเตือน Real-time และ Telegram Bot รวมถึงระบบสรุปงานประจำวันผ่านอีเมล (Daily Email Digest)
 
 ### 🛠️ เทคโนโลยีหลักในระบบ (Tech Stack)
-- **Backend API:** NestJS (TypeScript), Prisma ORM v5.22.0
+- **Backend API:** NestJS 10 (TypeScript), Prisma ORM v5.22.0
 - **Database:** PostgreSQL 16
-- **Frontend:** Next.js 14 (App Router, React 18, TypeScript, Tailwind CSS, PWA)
-- **Authentication:** 
-  - Central IAM Engine (OIDC / OAuth 2.0 Authorization Code Flow + PKCE S256 + RS256 JWKS)
-  - รองรับทั้ง **SP-Initiated SSO** (ล็อกอินจาก WorkSync) และ **IdP-Initiated Portal Launch** (กดเปิดจาก Portal)
+- **Frontend:** Next.js 14 (App Router, React 18, TypeScript, Tailwind CSS, Recharts, SheetJS `xlsx`)
+- **Real-Time Engine:** Server-Sent Events (SSE) Stream + Visibility-Aware Focus Sync
+- **Email Engine:** Nodemailer + SMTP Config (Zero `.env` Dynamic Settings)
+- **Audio & Visual FX:** Web Audio API Sound Synthesizer + HTML5 Canvas Confetti (Zero External Audio Assets)
+- **Authentication:**
+  - Window Asia Central IAM (OIDC / OAuth 2.0 PKCE + RS256 JWKS)
+  - รองรับทั้ง **SP-Initiated SSO** และ **IdP-Initiated Portal Launch**
   - Local Database Credentials (JWT)
   - Active Directory Gateway (Fallback สำหรับ Break-Glass Mode)
-- **Notifications:** Telegram Bot API
+  - 6-Digit PIN Code สำหรับ Quick Authentication
+- **Notifications:** In-App Notification Center, `@Mention` System, Telegram Bot API
 - **Infrastructure:** Docker & Docker Compose, Traefik Reverse Proxy (บน Hostinger VPS)
 
 ---
@@ -41,110 +47,143 @@
 [worksync-postgres :5432] (อยู่บน worksync-network เท่านั้น)
 ```
 
-> ⚠️ **ข้อควรระวังเรื่อง DNS บน VPS:**  
-> ในเน็ตเวิร์ก `root_default` มีคอนเทนเนอร์ชื่อ `api` และ `postgres` ของ Hostinger รันอยู่แล้ว  
-> **ห้าม** ตั้งชื่อ container หรือเรียกใช้ Hostname สั้นว่า `http://api:4000` โดยเด็ดขาด ต้องใช้ชื่อ **`http://worksync-api:4000`** เสมอ!
+> 🚨 **กฎเหล็กข้อห้ามเรื่อง Network & Ports บน VPS:**
+> 1. **ห้ามแมปพอร์ต 80, 443 หรือ 5432 ใน `docker-compose.yml` หลัก** เพราะจะชนกับ Traefik และ PostgreSQL ของ Hostinger
+> 2. ในเน็ตเวิร์ก `root_default` มี container ชื่อ `api` และ `postgres` ของ Hostinger รันอยู่แล้ว **ห้าม** ใช้ Hostname สั้นว่า `http://api:4000` เด็ดขาด **ต้องใช้ชื่อ `http://worksync-api:4000` เสมอ!**
+> 3. **หลัง Rebuild API Container ต้อง Restart `nextjs-app` เสมอ** เพื่อล้าง DNS Cache เก่าใน Next.js Connection Pool
 
 ### 💻 Local Development
-- Next.js ถูกแมปพอร์ต **`80:3000`** ผ่านไฟล์ `docker-compose.override.yml` เพื่อให้เปิดผ่าน `http://localhost` ได้โดยตรง
-- ไฟล์ `docker-compose.yml` หลักจะ**ไม่มีการแมปพอร์ต 80 หรือ 443 หรือ 5432** เพื่อป้องกันการชนกับ Traefik บน VPS
+- Next.js ถูกแมปพอร์ต **`80:3000`** ผ่านไฟล์ `docker-compose.override.yml` เพื่อให้เปิดทดสอบด้วย `http://localhost` โดยตรง
+- ไฟล์ `docker-compose.override.yml` อยู่ใน `.gitignore` เรียบร้อยแล้ว ไม่ถูกดันขึ้น VPS
 
 ---
 
-## 🚀 3. ฟีเจอร์ที่พัฒนาเสร็จสมบูรณ์ล่าสุด (Recent Implementations)
+## 🚀 3. ฟังก์ชันสำคัญในระบบ (Features & Capabilities)
 
-### 🔐 ระบบ Central IAM SSO Integration (v2.0.0 Zero `.env` Standard)
-1. **Dynamic Configuration (`system_settings` table):**
-   - จัดเก็บการตั้งค่า OIDC (Base URL, Client ID, Secret, Session TTL, Default Group, Enforce SSO Toggle) ในฐานข้อมูล PostgreSQL
-   - ปรับเปลี่ยนค่าได้ทันทีผ่านหน้าแอดมิน (`/admin/settings`) โดยไม่ต้อง Restart Container
-   - มี In-Memory Cache ช่วยลดภาระฐานข้อมูล
-2. **Dual SSO Flow Support (SP-Initiated & IdP-Initiated):**
-   - **SP-Initiated:** ผู้ใช้กดปุ่ม "เข้าสู่ระบบด้วย Central IAM" บนหน้าเว็บ WorkSync ระบบจะสร้าง `code_verifier` (Base64URL) และ `code_challenge` (SHA-256 PKCE) เก็บไว้ใน `sessionStorage` เพื่อส่งแลก Token
-   - **IdP-Initiated (Portal Launch):** ผู้ใช้เปิดระบบโดยคลิก App Card จากหน้า Central IAM Portal (`ciam.windowasia.com/portal`) ทาง Portal จะ Redirect มายัง `/auth/callback?code=...` โดยตรง (ไม่มี `code_verifier`) ฝั่ง Backend ของ WorkSync รองรับการแลกเปลี่ยน Token ด้วย `client_id` + `client_secret` (Confidential Client Flow) ได้อย่างราบรื่น
-3. **JWKS RS256 Verification:**
-   - ดึง Public Key จาก `/.well-known/jwks.json` อัตโนมัติ พร้อม In-Memory Key Caching 1 ชั่วโมง
-4. **Auto-Provisioning:**
-   - สร้าง User และ Role ให้อัตโนมัติเมื่อพนักงานล็อกอินผ่าน Central IAM ครั้งแรก
-5. **Break-Glass Emergency Panel:**
-   - เมื่อ Central IAM มีปัญหา แอดมินสามารถเปิดโหมดฉุกเฉินเพื่อส่ง Request ตรงไปยัง AD Gateway ภายในองค์กรได้
-6. **Zero-Confusion Login:**
-   - เมื่อปิดสวิตช์ SSO (`ciam_sso_enabled = false`) หน้าจอ Login จะเป็น **Clean Standard Login** ทันที ซ่อนปุ่ม SSO และการแจ้งเตือนทั้งหมด
-   - สวิตช์ในหน้า Admin เป็นแบบ **Instant Auto-Save Toggle** มี Cache-Busting ป้องกัน Browser/Next.js แคชสถานะ
-7. **ISO 27001 Audit Trail (`transaction_logs` table):**
-   - บันทึกประวัติ Transaction ทุกครั้ง (`SSO-01` ถึง `SSO-04`, `CFG-01`, `BG-01`, `BG-02`)
+### 1. 📊 ระบบแดชบอร์ดผู้บริหารหลายมิติ (Multi-Perspective Dashboard)
+- สลับดูได้ 4 มุมมองเจาะลึก:
+  1. **🏢 แผนก:** สรุปภาระงานแบ่งตามแผนก, กราฟแท่งแนวนอนสัดส่วนสถานะงาน (Todo/Doing/Review/Done) และกดเจาะลึกดูสมาชิกในแผนกได้
+  2. **📂 โครงการ:** ติดตามความคืบหน้าของแต่ละ Project Owner พร้อม Donut Chart แสดงอัตราความสำเร็จ
+  3. **👥 ภาระงานทีม:** วิเคราะห์ Workload รายบุคคล, คัดกรองผู้ที่มีงานล้นมือ (Overload Warning)
+  4. **⏰ กำหนดส่ง & เสี่ยง:** ตรวจสอบงานที่เกินกำหนดส่ง (Overdue) และงานที่ต้องส่งภายใน 48 ชั่วโมง
+
+### 2. 🎯 การแยกมุมมองงานตามสิทธิ์และบทบาท (Strict View Separation)
+- **ภาพรวม (Dashboard):** สรุปสถานะภารกิจทั้งหมดในองค์กร
+- **งานฉัน (My Tasks):** เฉพาะงานที่ผู้ใช้เป็นผู้รับผิดชอบโดยตรง (`assignee`)
+- **มอบหมาย (Assigned by Me):** เฉพาะงานที่ผู้ใช้เป็นคนสร้างและมอบหมายให้ผู้อื่นทำ (ผู้ใต้บังคับบัญชาเลือกเราเป็นผู้จัดการจะไม่ปนเข้ามา)
+- **เกี่ยวข้อง (Involved Tasks):** งานที่ผู้ใช้มีส่วนร่วมในฐานะ Manager หรือ Collaborator
+- **Roadmap (Gantt View):** แสดงเส้นเวลา Timeline การดำเนินงานและกำหนดส่งของทุกภารกิจ
+
+### 3. ✉️ การตั้งค่าระบบอีเมล SMTP และ Email Digest ประจำวัน
+- **Admin System Settings (`/admin/settings`):**
+  - ส่วนตั้งค่า `✉️ 2. ตั้งค่าการส่งอีเมล (SMTP Config)`
+  - รองรับ Host, Port, Sender Email, Password (พร้อมปุ่ม `👁️ แสดง` / `🙈 ซ่อน`)
+  - มีช่องกรอกอีเมลทดสอบ และปุ่ม `✉️ ทดสอบส่ง Email` ทันที
+  - บันทึกลงตาราง `system_settings` แบบ Dynamic Zero `.env`
+- **User Profile Email Digest:**
+  - สมาชิกสามารถเข้าไปเปิด/ปิดรับอีเมลสรุปงานประจำวันได้ใน Modal โปรไฟล์
+  - กำหนดเวลาส่งได้เอง (เช่น `08:30` น.)
+  - เลือกประเภทงานที่ต้องการให้สรุปได้ (งานฉัน / งานที่เกี่ยวข้อง / งานที่มอบหมาย)
+  - Background Cron ตรวจสอบและส่งอีเมลสรุปอัตโนมัติในรูปแบบ Apple Card HTML สวยงาม
+
+### 4. ⚡ Real-Time Live Sync & Auto-Refresh
+- มี Endpoint SSE `/api/items/tasks/stream` ส่ง Event ทันทีที่มีการเพิ่ม/แก้/ลบงาน
+- Frontend ซิงค์ข้อมูลอัตโนมัติแบบ Real-time โดยไม่ต้องกด F5
+- มีระบบตรวจจับ Window Focus เมื่อผู้ใช้สลับแท็บกลับมาจะอัปเดตข้อมูลล่าสุดทันที
+
+### 5. 🔍 Global Quick Search & Command Palette (`Cmd + K` / `Ctrl + K`)
+- กดคีย์ลัด `Cmd + K` (Mac) หรือ `Ctrl + K` (Windows) หรือกดปุ่มค้นหาบน Header
+- ค้นหาแบบ Fuzzy Search คลุมทั้งชื่องาน, รายละเอียด, ผู้รับผิดชอบ, แผนก, คำสั่งด่วน (สร้างงาน, สลับธีม Dark/Light, เปิดโปรไฟล์)
+
+### 6. 🔔 In-App Notification Center & `@Mention`
+- ระบบกระดิ่งแจ้งเตือนบน Header พร้อมตัวเลขนับ Unread Badge สีแดง
+- สแกนการแท็ก `@ชื่อ` หรือ `@username` ในคอมเมนต์และรายงานความคืบหน้า แล้วส่งการแจ้งเตือนไปยังผู้ใช้คนนั้นทันที
+- คลิกที่การแจ้งเตือนจะเปิดไปยังหน้างายนั้นทันที พร้อมปุ่ม "อ่านทั้งหมด"
+
+### 7. 📈 Gantt Chart / Roadmap View
+- แผนภูมิแกนต์แสดงช่วงเวลาการทำงานและกำหนดส่งในกรอบเวลา 14 วัน หรือ 30 วัน
+- แถบ Progress Bar แนวนอนตามเปอร์เซ็นต์ความคืบหน้า พร้อมไฮไลต์สีแดงเตือนงานเกินกำหนด
+
+### 8. 📱 PWA (Progressive Web App) & Mobile First UX
+- ติดตั้งเป็นแอปบนหน้าจอมือถือได้ (Add to Home Screen) ผ่าน `manifest.json` และ `sw.js`
+- **Mobile Header Optimization:**
+  - ซ่อนปุ่มงาน 3 อัน ("งานฉัน", "มอบหมาย", "เกี่ยวข้อง") และปุ่ม `+ เพิ่มงาน` จาก Header ด้านบน เพื่อตัดความซ้ำซ้อน
+  - เข้าถึงเมนูดังกล่าวได้อย่างสะดวกผ่าน Bottom Navigation Bar ด้านล่าง
+
+### 9. 📥 ส่งออกข้อมูลเป็นไฟล์ Excel แท้ (`.xlsx`)
+- ใช้ไลบรารี SheetJS (`xlsx`) ในการแปลงข้อมูลภารกิจทั้งหมดเป็นไฟล์ Spreadsheet `.xlsx`
+- ปุ่ม Export ออกแบบเป็น **Icon Excel สีเขียว Emerald** ขนาดกะทัดรัด ประหยัดพื้นที่บน Header
+
+### 10. 🎉 Micro-interactions & Client Image Compression
+- ยิงพลุเฉลิมฉลอง Confetti + เสียงสังเคราะห์ Web Audio Chime + ระบบสั่น Haptic เมื่อทำภารกิจหรือ Checklist สำเร็จ 100%
+- บีบอัดรูปภาพแนบงานและรูปประจำตัวด้วย HTML5 Canvas อัตโนมัติก่อนอัปโหลด ช่วยลดขนาดไฟล์ภาพถ่ายจาก 8–10MB เหลือเพียง 200–400KB
 
 ---
 
 ## 🗄️ 4. โครงสร้างฐานข้อมูล (Database Schema)
 
-ตารางสำคัญใน `api/prisma/schema.prisma`:
-- **`system_settings`**:
-  - `key` (String, Unique) — เช่น `ciam_sso_enabled`, `ciam_base_url`, `ciam_client_id`, `ciam_client_secret`, `ciam_m2m_key`, `telegram_bot_token`, `telegram_chat_id`
-  - `value` (Text) — ค่าคอนฟิก
-  - `data_type` (VarChar) — `string`, `boolean`, `integer`, `encrypted`
-  - `category` (VarChar) — หมวดหมู่ เช่น `central_iam`, `telegram`, `general`
-- **`transaction_logs`**:
-  - บันทึก Audit Log สำหรับการตรวจสอบความปลอดภัย พร้อม IP, สถานะ, ระยะเวลาประมวลผล และ User ที่ทำรายการ
-- **ตารางระบบหลักของ WorkSync**:
-  - `users`, `tasks`, `task_comments`, `task_likes`, `task_reads`, `announcements`
+ไฟล์ Schema: [`api/prisma/schema.prisma`](file:///d:/Python/WorkSync/api/prisma/schema.prisma)
+
+### ตารางหลักที่สำคัญ:
+- **`users`**: ข้อมูลผู้ใช้, สิทธิ์ (`ADMIN`/`USER`), แผนก, Telegram ID, PIN Code, และฟิลด์ Email Digest:
+  - `emailDigestEnabled` (Boolean)
+  - `emailDigestTime` (String e.g. "08:30")
+  - `emailDigestTypes` (Json)
+  - `lastDigestSentAt` (DateTime)
+- **`notifications`**: การแจ้งเตือน In-App (`userId`, `title`, `message`, `link`, `isRead`, `createdAt`)
+- **`tasks`**: ภารกิจหลัก (`title`, `description`, `status`, `progress`, `assignee`, `manager`, `collaborators`, `deadline`, `createdBy`, `isArchived`, `subtasks`, `latestUpdate`)
+- **`task_comments`**: ข้อคิดเห็นและการตอบกลับในแต่ละภารกิจ
+- **`task_likes`**: ประวัติการกดถูกใจภารกิจ
+- **`task_reads`**: ตรวจจับสถานะการเปิดอ่านของผู้ใช้แต่ละคน
+- **`system_settings`**: จัดเก็บคอนฟิก Dynamic Zero `.env`:
+  - Central IAM: `ciam_base_url`, `ciam_client_id`, `ciam_client_secret`, `ciam_sso_enabled`, `ciam_break_glass_active`, `ciam_ad_gateway_url`
+  - SMTP Email: `smtp_host`, `smtp_port`, `smtp_sender_email`, `smtp_password`
+- **`transaction_logs`**: บันทึก Audit Log ความปลอดภัย (ISO 27001)
 
 ---
 
-## 📋 5. กฎเหล็กและข้อปฏิบัติในการ Deploy (Strict Deployment Rules)
+## 📋 5. กฎเหล็กและขั้นตอนการ Deploy (Strict Deployment Workflow)
 
-### 🤖 มาตรฐานกระบวนการปฏิบัติการของ AI (Mandatory Workflow)
-1. **Local Build & Test:** AI จะต้องรัน build และทดสอบโค้ดฝั่ง Local ทั้งหมด (`npm --prefix api run build`, `npm --prefix web run build`) ให้มั่นใจว่าไม่มี Error ก่อนเสมอ หากมีปัญหาต้องแก้จนผ่าน
-2. **Automated Git Push:** ทำการ commit และ push ขึ้น `origin main` อัตโนมัติ
-3. **คำสั่งบน VPS ต้องมี `cd /var/www/Worksync` เสมอ:** ทุกชุดคำสั่งที่แจ้งให้ผู้ใช้รันบน VPS ต้องมีคำสั่งเข้าไปยังโฟลเดอร์โปรเจกต์ก่อนเสมอ
+### 🤖 มาตรฐานการทำงานของ AI Agent
+1. **Local Build & Test:** ทดสอบบิวด์ระบบฝั่ง Local ทั้งหมดให้มั่นใจว่าไม่มีข้อผิดพลาด (`npm --prefix api run build`, `npm --prefix web run build`)
+2. **Automated Git Push:** บันทึกและ Push ขึ้น `origin main` ให้เรียบร้อย
+3. **แนบชุดคำสั่ง VPS ที่มี `cd /var/www/Worksync` เสมอ:** เพื่อให้สามารถคัดลอกไปวางรันบน VPS ได้ทันที
 
-### ☁️ ขั้นตอน Deploy บน VPS (รันตามลำดับนี้เสมอ)
+### ☁️ คำสั่ง Deploy บน VPS (Production)
+
 ```bash
 # 1. เข้าสู่โฟลเดอร์โปรเจกต์
 cd /var/www/Worksync
 
-# 2. ดึงโค้ดล่าสุด
+# 2. ดึงโค้ดล่าสุดจาก Git
 git pull origin main
 
-# 3. ซิงค์โครงสร้างฐานข้อมูล (ห้ามใช้ prisma migrate เพราะจะทำให้ข้อมูลหาย!)
-docker compose exec api npx prisma db push --accept-data-loss
+# 3. Rebuild เฉพาะ Service ที่มีการเปลี่ยนแปลง
+docker compose up --build -d api          # กรณีแก้ Backend
+docker compose up --build -d nextjs-app   # กรณีแก้ Frontend
 
-# 4. ใส่ข้อมูลเริ่มต้น (ถ้ามี Settings ฟิลด์ใหม่)
-docker compose exec api node prisma/seed.js
+# 4. หากมีการแก้ไข prisma/schema.prisma ให้อัปเดต DB (ข้อมูลเดิมไม่สูญหาย)
+docker compose exec api npx prisma db push
 
-# 5. Rebuild เฉพาะ Container ที่แก้ไข
-docker compose up --build -d api          # กรณีแก้ backend
-docker compose up --build -d nextjs-app   # กรณีแก้ frontend
-
-# ⚠️ กฎเหล็กสำคัญ: หลัง Rebuild api ต้อง Restart nextjs-app เสมอ เพื่อล้าง DNS Cache!
+# 5. ⚠️ สำคัญมาก: หลัง Rebuild API ต้อง Restart Next.js เสมอ (เพื่อล้าง DNS Cache)
 docker compose restart nextjs-app
 ```
 
 ---
 
-## 🔍 6. ประวัติปัญหาที่พบบ่อยและวิธีแก้ไข (Troubleshooting & Known Incidents)
+## 🔍 6. การแก้ไขปัญหาที่พบบ่อย (Troubleshooting & Known Incidents)
 
-| อาการที่พบ | สาเหตุ | วิธีแก้ |
+| ปัญหา | สาเหตุ | วิธีแก้ไข |
 |---|---|---|
-| **ยืนยันตัวตนไม่สำเร็จ: ข้อมูล code, code_verifier และ redirect_uri จำเป็นสำหรับการแลกเปลี่ยน Token ตอนเปิดแอปจาก Portal** | การเปิดแอปจากหน้า Central IAM Portal (IdP-Initiated) ไม่ได้ผ่านหน้า Login ของ WorkSync จึงไม่มี `sso_code_verifier` ใน sessionStorage | Backend ได้รับการปรับปรุงให้ `code_verifier` เป็น optional ถ้าไม่มีค่าจะส่ง Token Request ด้วย `client_id` + `client_secret` (Confidential Client) |
-| **ขึ้น 500 "Internal Server Error" ตอนกดสลับสวิตช์ SSO แล้วเด้งกลับ** | ฐานข้อมูลบน VPS ยังไม่มีตาราง `system_settings` หรือไม่ได้รัน `db push` | รัน `docker compose exec api npx prisma db push --accept-data-loss` |
-| **ปิด SSO แล้ว แต่หน้า Login หรือหน้า Setting ยังแสดงว่าเปิดอยู่** | Next.js หรือเบราว์เซอร์แคชผลลัพธ์ของ API | มีการใส่ Cache-Busting `_t=${Date.now()}` และ `no-store` ใน `web/src/lib/auth.ts` แล้ว และควรรัน `docker compose restart nextjs-app` |
-| **Next.js ขึ้น ECONNREFUSED เมื่อเชื่อมต่อไปยัง API** | Next.js จำ IP เดิมของ Container `api` ที่ถูก rebuild ไปแล้ว | สั่ง `docker compose restart nextjs-app` เพื่อรีเซ็ต DNS cache |
-| **พอร์ต 80 ชนกันบน VPS** | มีการใส่ `ports: - 80:3000` ใน `docker-compose.yml` หลัก | ลบ `ports:` ออกจากไฟล์หลัก แล้วใส่ใน `docker-compose.override.yml` สำหรับ Local เท่านั้น |
+| **Login แล้วขึ้น Internal Server Error หรือ ECONNREFUSED** | Next.js จำ IP เดิมของ Container API ที่ถูก rebuild ใหม่ (DNS Cache ค้าง) | รัน `docker compose restart nextjs-app` บน VPS |
+| **Port already allocated (80 หรือ 443 หรือ 5432)** | มีการใส่ ports ใน `docker-compose.yml` หลัก ซึ่งชนกับ Traefik หรือ Postgres ของ Hostinger | นำ ports ออกจาก `docker-compose.yml` หลัก แล้วใส่ใน `docker-compose.override.yml` สำหรับ Local เท่านั้น |
+| **API Container คุยกับ Next.js ไม่ได้หลัง Deploy** | มีโค้ดเรียก `http://api:4000` ชนกับ container `api` ของ Hostinger | ตรวจสอบว่าใช้ `http://worksync-api:4000` เสมอ |
+| **NestJS API ไม่ตอบสนองต่อ Container อื่น** | NestJS bind แค่ `localhost` | ตรวจสอบไฟล์ `main.ts` ต้องเป็น `await app.listen(port, '0.0.0.0');` |
+| **ฐานข้อมูลฟ้อง Column ไม่ตรง หรือฟังก์ชันใหม่ Error** | ยังไม่ได้ซิงค์ Prisma Schema ล่าสุดเข้าสู่ DB | รัน `docker compose exec api npx prisma db push` |
 
 ---
 
-## 🗺️ 7. แผนงานและสิ่งที่ต้องทำต่อในอนาคต (Next Steps & Backlog)
-
-1. **Session Revocation & Single Logout (SLO):**
-   - รองรับ Front-channel หรือ Back-channel Logout เมื่อ Central IAM มีการยิง Webhook แจ้งเตือนการออกจากระบบ
-2. **ทำ Security Hardening เพิ่มเติม:**
-   - เข้ารหัส AES-256-GCM สำหรับ `ciam_client_secret` ในตาราง `system_settings` (ปัจจุบันเก็บแบบข้อความปกติโดยใช้ masking บน UI)
-3. **ขยายระบบ Notification ผ่าน Telegram Bot:**
-   - เพิ่ม Template แจ้งเตือนเมื่อมีงานใหม่, งานใกล้กำหนดส่ง หรือการ Mention ใน Comment
-
----
-
-## 📁 8. แผนผังไดเรกทอรีสำคัญ (Key Files Map)
+## 📁 7. แผนผังไดเรกทอรีสำคัญ (Key Files Map)
 
 ```
 WorkSync/
@@ -152,33 +191,48 @@ WorkSync/
 │   └── AGENTS.md                          # กฎระเบียบและข้อจำกัดของระบบทั้งหมด
 ├── api/
 │   ├── prisma/
-│   │   ├── schema.prisma                  # โมเดลฐานข้อมูล (SystemSetting, TransactionLog ฯลฯ)
-│   │   └── seed.js                        # สคริปต์ลงข้อมูลเริ่มต้น
+│   │   └── schema.prisma                  # Prisma Schema (User, Task, Notification, SystemSetting)
 │   └── src/
-│       ├── auth/
-│       │   ├── ciam-sso.controller.ts     # SSO Auth Controller (Authorize, Callback, Discovery, Break-Glass)
-│       │   └── ciam-sso.service.ts        # PKCE, JWKS Verification, Auto-Provisioning, Token Exchange
-│       ├── settings/
-│       │   ├── settings.controller.ts     # Admin Settings API
-│       │   └── settings.service.ts        # Dynamic Settings & Memory Caching
-│       ├── telegram/
-│       │   ├── telegram.controller.ts     # Telegram Admin & Notification API
-│       │   └── telegram.service.ts        # ส่งข้อความแจ้งเตือนผ่าน Telegram Bot
-│       └── transaction-logs/
-│           └── transaction-logs.service.ts # ISO 27001 Audit Trail
+│       ├── app.module.ts                  # Root App Module รวมทุก Submodules
+│       ├── email/                         # ระบบส่งอีเมล SMTP และ Daily Email Digest
+│       │   ├── email.module.ts
+│       │   └── email.service.ts
+│       ├── notifications/                 # In-App Notification & Mention Service
+│       │   ├── notifications.controller.ts
+│       │   ├── notifications.module.ts
+│       │   └── notifications.service.ts
+│       ├── settings/                      # Admin System Settings (CIAM & SMTP)
+│       │   ├── settings.controller.ts
+│       │   └── settings.service.ts
+│       ├── tasks/                         # Task CRUD, Real-Time SSE Stream, Activity
+│       │   ├── tasks.controller.ts
+│       │   └── tasks.service.ts
+│       └── users/                         # User Profile, Avatar, Digest Preferences
+│           ├── users.controller.ts
+│           └── users.service.ts
 ├── web/
-│   ├── next.config.js                     # Rewrites กฎการส่งต่อ Request ไปยัง worksync-api
+│   ├── public/
+│   │   ├── manifest.json                  # Web App Manifest สำหรับ PWA
+│   │   └── sw.js                          # Service Worker
 │   └── src/
 │       ├── app/
-│       │   ├── admin/settings/page.tsx    # หน้า Admin ตั้งค่า Central IAM, Break-Glass, Logs
-│       │   ├── admin/telegram/page.tsx    # หน้า Admin จัดการ Telegram Bot
-│       │   ├── auth/callback/page.tsx     # หน้า Callback รับ Authorization Code (รองรับ SP & IdP flow)
-│       │   └── login/page.tsx             # หน้าจอล็อกอิน Clean Standard / SSO / Break-Glass
+│       │   ├── admin/settings/page.tsx    # Admin Settings (CIAM SSO & SMTP Config UI)
+│       │   ├── layout.tsx                 # Root Layout + PWA Registration
+│       │   └── page.tsx                   # หน้าหลัก Dashboard, Navigation, Command Palette, Live Sync
+│       ├── components/
+│       │   ├── CommandPalette.tsx         # ค้นหาด่วน & คำสั่งลัด (Cmd+K)
+│       │   ├── DashboardView.tsx          # แดชบอร์ดผู้บริหาร 4 มิติ
+│       │   ├── GanttView.tsx              # Gantt Chart / Roadmap View
+│       │   ├── NotificationCenter.tsx     # กระดิ่งแจ้งเตือน & Unread Badge
+│       │   ├── TaskDetail.tsx             # หน้ารายละเอียดงาน & Checklist & Mention
+│       │   └── TeamDashboard.tsx          # การ์ดภารกิจรายบุคคล
 │       └── lib/
-│           └── auth.ts                    # Client API wrapper สำหรับ SSO และ Admin Settings
+│           ├── api.ts                     # API Client + Canvas Image Compression
+│           ├── auth.ts                    # Authentication & Display Name Helpers
+│           ├── effects.ts                 # Confetti, Web Audio Chime, Haptic Vibration
+│           └── userMatch.ts               # ระบบ User Matching อัจฉริยะ
 ├── docker-compose.yml                     # Production Docker config (ปลอดพอร์ต 80/443)
 ├── docker-compose.override.yml            # Local Docker config (map 80:3000 สำหรับ localhost)
 ├── HANDOFF.md                             # เอกสารส่งต่องานฉบับนี้
-├── Memory.md                              # บันทึกความจำหลักของ AI Agent และ Cheat Sheet คำสั่งสำคัญ
 └── README.md                              # เอกสารภาพรวมและการติดตั้งโปรเจกต์
 ```
