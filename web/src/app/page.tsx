@@ -17,6 +17,7 @@ import { DEPARTMENTS } from '@/types';
 import UserDisplay from '@/components/UserDisplay';
 import ThemeToggle from '@/components/ThemeToggle';
 import { isCurrentUserMatch, isSamePerson } from '@/lib/userMatch';
+import * as XLSX from 'xlsx';
 
 export default function Home() {
   const router = useRouter();
@@ -312,78 +313,57 @@ export default function Home() {
   }, [currentUser, loadTasks]);
 
   const handleExportExcel = () => {
-    const headers = [
-      'หัวข้อภารกิจ',
-      'รายละเอียด',
-      'เจ้าของโครงการ',
-      'สถานะ',
-      'ความคืบหน้า',
-      'ผู้รับผิดชอบ',
-      'ผู้จัดการ',
-      'ผู้ร่วมงาน',
-      'กำหนดส่ง',
-      'ผู้สร้างงาน',
-      'วันที่สร้างงาน',
-      'อัปเดตล่าสุด',
-      'อัปเดตความคืบหน้าล่าสุด'
-    ];
-
     const statusMap: Record<string, string> = {
       todo: 'To Do',
       in_progress: 'Doing',
       review: 'Review',
-      done: 'Done'
+      done: 'Done',
     };
 
-    const csvRows = [
-      headers.join(','),
-      ...unfilteredTasks.map(t => {
-        const title = `"${(t.title || '').replace(/"/g, '""')}"`;
-        const desc = `"${(t.description || '').replace(/"/g, '""')}"`;
-        const projOwner = `"${(t.project_owner || '').replace(/"/g, '""')}"`;
-        const status = `"${statusMap[t.status] || t.status}"`;
-        const progress = `"${t.progress || 0}%"`;
-        const assignee = `"${(t.assignee || '').replace(/"/g, '""')}"`;
-        const manager = `"${(t.manager || '').replace(/"/g, '""')}"`;
-        const collaborators = `"${(t.collaborators || []).join(', ').replace(/"/g, '""')}"`;
-        const deadline = `"${t.deadline ? new Date(t.deadline).toLocaleDateString('th-TH') : '—'}"`;
-        const createdBy = `"${(t.created_by_name || '').replace(/"/g, '""')}"`;
-        const createdAt = `"${t.created_at ? new Date(t.created_at).toLocaleString('th-TH') : '—'}"`;
-        const updatedAt = `"${t.updated_at ? new Date(t.updated_at).toLocaleString('th-TH') : '—'}"`;
-        
-        let latestUpdate = t.latest_update || '';
-        const sections = latestUpdate.split(/---\r?\n|---/g).map(s => s.trim()).filter(Boolean);
-        const firstSec = sections[0] || '';
-        const cleanUpdate = firstSec.replace(/\[attachment:([^|\]]+)\|name:([^\]]+)\]/g, '').trim();
-        const latestUpdateEscaped = `"${cleanUpdate.replace(/"/g, '""')}"`;
+    const rows = unfilteredTasks.map((t) => {
+      let latestUpdate = t.latest_update || '';
+      const sections = latestUpdate.split(/---\r?\n|---/g).map((s) => s.trim()).filter(Boolean);
+      const firstSec = sections[0] || '';
+      const cleanUpdate = firstSec.replace(/\[attachment:([^|\]]+)\|name:([^\]]+)\]/g, '').trim();
 
-        return [
-          title,
-          desc,
-          projOwner,
-          status,
-          progress,
-          assignee,
-          manager,
-          collaborators,
-          deadline,
-          createdBy,
-          createdAt,
-          updatedAt,
-          latestUpdateEscaped
-        ].join(',');
-      })
+      return {
+        'หัวข้อภารกิจ': t.title || '',
+        'รายละเอียด': t.description || '',
+        'เจ้าของโครงการ': t.project_owner || '',
+        'สถานะ': statusMap[t.status] || t.status,
+        'ความคืบหน้า': `${t.progress || 0}%`,
+        'ผู้รับผิดชอบ': t.assignee || '',
+        'ผู้จัดการ': t.manager || '',
+        'ผู้ร่วมงาน': (t.collaborators || []).join(', '),
+        'กำหนดส่ง': t.deadline ? new Date(t.deadline).toLocaleDateString('th-TH') : '—',
+        'ผู้สร้างงาน': t.created_by_name || '',
+        'วันที่สร้างงาน': t.created_at ? new Date(t.created_at).toLocaleString('th-TH') : '—',
+        'อัปเดตล่าสุด': t.updated_at ? new Date(t.updated_at).toLocaleString('th-TH') : '—',
+        'อัปเดตความคืบหน้าล่าสุด': cleanUpdate,
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks');
+
+    worksheet['!cols'] = [
+      { wch: 30 },
+      { wch: 35 },
+      { wch: 20 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 25 },
+      { wch: 15 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 40 },
     ];
 
-    const csvContent = '\uFEFF' + csvRows.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `tasks_export_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    XLSX.writeFile(workbook, `WorkSync_Tasks_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   const getUserTelegramId = (nameOrId: string) => {
@@ -571,18 +551,14 @@ export default function Home() {
                   <ThemeToggle />
                   <button
                     onClick={handleExportExcel}
-                    className="w-9 h-9 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-sm flex items-center justify-center"
-                    title="Export CSV"
+                    className="w-9 h-9 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl transition-all active:scale-95 shadow-sm flex items-center justify-center cursor-pointer group"
+                    title="ส่งออก Excel (.xlsx)"
+                    aria-label="Export to Excel"
                   >
-                    📥
+                    <svg className="w-4 h-4 transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2ZM15.8 17.5L14 14.5L12.2 17.5H10.5L13.1 13.5L10.7 9.5H12.4L14 12.5L15.6 9.5H17.3L14.9 13.5L17.5 17.5H15.8ZM13 9V3.5L18.5 9H13Z" />
+                    </svg>
                   </button>
-                  <Link
-                    href="/tasks/new"
-                    className="w-9 h-9 bg-[#007AFF] text-white rounded-xl text-base font-bold transition-all shadow-sm flex items-center justify-center active:scale-95"
-                    title="เพิ่มงาน"
-                  >
-                    +
-                  </Link>
                   <div className="relative">
                     <button
                       onClick={(e) => {
@@ -671,42 +647,42 @@ export default function Home() {
                     setFilter('my_tasks');
                     sessionStorage.setItem('worksync_tab_filter', 'my_tasks');
                   }}
-                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                  className={`hidden sm:inline-flex px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap items-center gap-1.5 ${
                     filter === 'my_tasks'
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
                   <span>👤</span>
-                  <span>งานของฉัน</span>
+                  <span>งานฉัน</span>
                 </button>
                 <button
                   onClick={() => {
                     setFilter('assigned_by_me');
                     sessionStorage.setItem('worksync_tab_filter', 'assigned_by_me');
                   }}
-                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                  className={`hidden sm:inline-flex px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap items-center gap-1.5 ${
                     filter === 'assigned_by_me'
                       ? 'bg-white dark:bg-slate-700 text-[#007AFF] dark:text-blue-400 shadow-[0_2px_8px_rgba(0,0,0,0.08)] font-bold'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
                   <span>🎯</span>
-                  <span>งานที่มอบหมาย</span>
+                  <span>มอบหมาย</span>
                 </button>
                 <button
                   onClick={() => {
                     setFilter('involved_tasks');
                     sessionStorage.setItem('worksync_tab_filter', 'involved_tasks');
                   }}
-                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                  className={`hidden sm:inline-flex px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap items-center gap-1.5 ${
                     filter === 'involved_tasks'
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
                   <span>👥</span>
-                  <span>งานเกี่ยวข้อง</span>
+                  <span>เกี่ยวข้อง</span>
                 </button>
                 <button
                   onClick={() => {
@@ -741,11 +717,13 @@ export default function Home() {
                   <ThemeToggle />
                   <button
                     onClick={handleExportExcel}
-                    className="px-3.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shadow-sm flex items-center gap-1.5 active:scale-95"
-                    title="Export CSV"
+                    className="w-9 h-9 bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl transition-all shadow-xs flex items-center justify-center cursor-pointer active:scale-95 group"
+                    title="ส่งออก Excel (.xlsx)"
+                    aria-label="Export to Excel"
                   >
-                    <span>📥</span>
-                    <span>Export</span>
+                    <svg className="w-5 h-5 transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2ZM15.8 17.5L14 14.5L12.2 17.5H10.5L13.1 13.5L10.7 9.5H12.4L14 12.5L15.6 9.5H17.3L14.9 13.5L17.5 17.5H15.8ZM13 9V3.5L18.5 9H13Z" />
+                    </svg>
                   </button>
                   <Link
                     href="/tasks/new"
