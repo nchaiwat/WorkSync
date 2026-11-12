@@ -4,6 +4,8 @@ import {
   ServiceUnavailableException,
   Logger,
   BadRequestException,
+  InternalServerErrorException,
+  HttpException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
@@ -13,7 +15,7 @@ import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramService } from '../telegram/telegram.service';
-import { Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 
 export interface AuthorizeUrlResponse {
   authorize_url: string;
@@ -161,164 +163,200 @@ export class CiamSsoService {
 
   // ─── SSO Callback & Token Exchange ──────────────────────────────────────
   async handleCallback(code: string, codeVerifier: string, redirectUri: string, ip: string) {
-    const ssoEnabled = await this.settingsService.getBoolean('ciam_sso_enabled', true);
-    if (!ssoEnabled) {
-      throw new ServiceUnavailableException('Central IAM SSO ปิดใช้งานในระบบ WorkSync');
-    }
-
-    const baseUrl = (await this.settingsService.get('ciam_base_url', 'https://ciam.windowasia.com')).replace(/\/+$/, '');
-    const clientId = await this.settingsService.get('ciam_client_id', 'worksync-spoke-client');
-    const clientSecret = await this.settingsService.get('ciam_client_secret', '');
-
-    // 1. Exchange Code with CIAM Token Endpoint
-    const tokenUrl = `${baseUrl}/api/v1/oauth/token`;
-    const tokenPayload: Record<string, string> = {
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: redirectUri,
-      client_id: clientId,
-      client_secret: clientSecret,
-    };
-    if (codeVerifier && codeVerifier.trim() !== '') {
-      tokenPayload.code_verifier = codeVerifier.trim();
-    }
-
-    let tokenResponse: any;
     try {
-      const res = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(tokenPayload),
-        signal: AbortSignal.timeout(8000),
-      });
-
-      const resText = await res.text();
-      if (!res.ok) {
-        let errMsg = `CIAM Token Exchange failed with status ${res.status}`;
-        try {
-          const errObj = JSON.parse(resText);
-          errMsg = errObj.error_description || errObj.message || errObj.detail || errMsg;
-        } catch {}
-        throw new Error(errMsg);
+      const ssoEnabled = await this.settingsService.getBoolean('ciam_sso_enabled', true);
+      if (!ssoEnabled) {
+        throw new ServiceUnavailableException('Central IAM SSO ปิดใช้งานในระบบ WorkSync');
       }
-      tokenResponse = JSON.parse(resText);
-    } catch (err: any) {
-      await this.transactionLogsService.recordLog({
-        category: 'ciam_sso',
-        action: 'login_failed',
-        status: 'failed',
-        message: `การยืนยันตัวตน SSO ล้มเหลว: ${err.message}`,
-        details: { error: 'TokenExchangeFailed', ip, detail: err.message },
-        triggeredBy: 'system:ciam',
-      });
-      throw new UnauthorizedException(`ไม่สามารถแลกเปลี่ยน Token กับ Central IAM ได้: ${err.message}`);
-    }
 
-    // 2. Verify ID Token
-    const idToken = tokenResponse.id_token;
-    if (!idToken) {
-      throw new UnauthorizedException('Central IAM ไม่ได้ส่ง ID Token กลับมา');
-    }
+      const baseUrl = (await this.settingsService.get('ciam_base_url', 'https://ciam.windowasia.com')).replace(/\/+$/, '');
+      const clientId = await this.settingsService.get('ciam_client_id', 'worksync-spoke-client');
+      const clientSecret = await this.settingsService.get('ciam_client_secret', 'sec_worksync_oauth_secret_2026');
 
-    let claims: any;
-    try {
-      claims = await this.verifyIdToken(idToken, baseUrl, clientId);
-    } catch (err: any) {
-      await this.transactionLogsService.recordLog({
-        category: 'ciam_sso',
-        action: 'login_failed',
-        status: 'failed',
-        message: `การยืนยันตัวตน SSO ล้มเหลว: ลายเซ็นไม่ถูกต้องหรือ Token หมดอายุ`,
-        details: { error: 'SignatureVerificationFailed', ip, detail: err.message },
-        triggeredBy: 'system:ciam',
-      });
-      throw new UnauthorizedException(`การตรวจสอบ ID Token ล้มเหลว: ${err.message}`);
-    }
+      // 1. Exchange Code with CIAM Token Endpoint
+      const tokenUrl = `${baseUrl}/api/v1/oauth/token`;
+      const tokenPayload: Record<string, string> = {
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: redirectUri,
+        client_id: clientId,
+        client_secret: clientSecret,
+      };
+      if (codeVerifier && codeVerifier.trim() !== '') {
+        tokenPayload.code_verifier = codeVerifier.trim();
+      }
 
-    const username = claims.sub || claims.preferred_username || claims.username;
-    const email = claims.email || null;
-    const fullName = claims.name || claims.full_name || username;
+      let tokenResponse: any;
+      try {
+        const res = await fetch(tokenUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(tokenPayload),
+          signal: AbortSignal.timeout(8000),
+        });
 
-    if (!username) {
-      throw new UnauthorizedException('ไม่พบข้อมูลระบุตัวตน (username / sub) ใน ID Token');
-    }
-
-    // 3. Resolve or Auto-Provision User
-    let user = await this.usersService.findOneByUsername(username);
-    if (!user && email) {
-      user = await this.usersService.findOneByEmail(email);
-    }
-
-    if (user) {
-      // Check status
-      if (user.status !== 'active') {
+        const resText = await res.text();
+        if (!res.ok) {
+          let errMsg = `CIAM Token Exchange failed with status ${res.status}`;
+          try {
+            const errObj = JSON.parse(resText);
+            errMsg = errObj.error_description || errObj.message || errObj.detail || errMsg;
+          } catch {}
+          throw new Error(errMsg);
+        }
+        tokenResponse = JSON.parse(resText);
+      } catch (err: any) {
         await this.transactionLogsService.recordLog({
           category: 'ciam_sso',
-          action: 'account_deactivated',
-          status: 'warning',
-          message: `ปฏิเสธการเข้าสู่ระบบ: บัญชีพนักงาน '${username}' ถูกระงับสิทธิ์ในระบบนี้`,
-          details: { username, ip, reason: `status is ${user.status}` },
-          triggeredBy: `user:${username}`,
+          action: 'login_failed',
+          status: 'failed',
+          message: `การยืนยันตัวตน SSO ล้มเหลว: ${err.message}`,
+          details: { error: 'TokenExchangeFailed', ip, detail: err.message },
+          triggeredBy: 'system:ciam',
         });
-        throw new UnauthorizedException(`บัญชีผู้ใช้ '${username}' ถูกระงับสิทธิ์ในระบบ WorkSync`);
+        throw new UnauthorizedException(`ไม่สามารถแลกเปลี่ยน Token กับ Central IAM ได้: ${err.message}`);
       }
-    } else {
-      // Auto-provisioning
-      const defaultGroup = await this.settingsService.get('ciam_auto_provision_group', 'User');
-      const isRoleAdmin = defaultGroup.toLowerCase().includes('admin');
-      const nameParts = fullName.trim().split(/\s+/);
-      const firstName = nameParts[0] || username;
-      const lastName = nameParts.slice(1).join(' ') || '-';
 
-      const randomPass = crypto.randomBytes(16).toString('hex');
-      user = await this.usersService.create({
-        username,
-        email: email || `${username}@waapps.net`,
-        password: randomPass,
-        firstName,
-        lastName,
-        role: isRoleAdmin ? Role.ADMIN : Role.USER,
-        status: 'active',
-        isAdAuth: true,
-        department: claims.department || 'Window Asia',
-        position: claims.position || 'Staff',
+      // 2. Verify ID Token
+      const idToken = tokenResponse.id_token;
+      if (!idToken) {
+        throw new UnauthorizedException('Central IAM ไม่ได้ส่ง ID Token กลับมา');
+      }
+
+      let claims: any;
+      try {
+        claims = await this.verifyIdToken(idToken, baseUrl, clientId);
+      } catch (err: any) {
+        await this.transactionLogsService.recordLog({
+          category: 'ciam_sso',
+          action: 'login_failed',
+          status: 'failed',
+          message: `การยืนยันตัวตน SSO ล้มเหลว: ลายเซ็นไม่ถูกต้องหรือ Token หมดอายุ`,
+          details: { error: 'SignatureVerificationFailed', ip, detail: err.message },
+          triggeredBy: 'system:ciam',
+        });
+        throw new UnauthorizedException(`การตรวจสอบ ID Token ล้มเหลว: ${err.message}`);
+      }
+
+      const username = claims.preferred_username || claims.username || claims.sub;
+      const email = claims.email || null;
+      const fullName = claims.name || claims.full_name || username;
+
+      if (!username) {
+        throw new UnauthorizedException('ไม่พบข้อมูลระบุตัวตน (username / sub) ใน ID Token');
+      }
+
+      const cleanUsername = String(username).trim();
+
+      // 3. Resolve or Auto-Provision User (Case-insensitive check)
+      let user = await this.prisma.user.findFirst({
+        where: {
+          OR: [
+            { username: { equals: cleanUsername, mode: Prisma.QueryMode.insensitive } },
+            ...(email ? [{ email: { equals: String(email).trim(), mode: Prisma.QueryMode.insensitive } }] : []),
+          ],
+        },
       });
 
+      if (user) {
+        // Check status
+        if (user.status !== 'active') {
+          await this.transactionLogsService.recordLog({
+            category: 'ciam_sso',
+            action: 'account_deactivated',
+            status: 'warning',
+            message: `ปฏิเสธการเข้าสู่ระบบ: บัญชีพนักงาน '${cleanUsername}' ถูกระงับสิทธิ์ในระบบนี้`,
+            details: { username: cleanUsername, ip, reason: `status is ${user.status}` },
+            triggeredBy: `user:${cleanUsername}`,
+          });
+          throw new UnauthorizedException(`บัญชีผู้ใช้ '${cleanUsername}' ถูกระงับสิทธิ์ในระบบ WorkSync`);
+        }
+      } else {
+        // Auto-provisioning
+        const defaultGroup = await this.settingsService.get('ciam_auto_provision_group', 'User');
+        const isRoleAdmin = defaultGroup.toLowerCase().includes('admin');
+        const nameParts = fullName.trim().split(/\s+/);
+        const firstName = nameParts[0] || cleanUsername;
+        const lastName = nameParts.slice(1).join(' ') || '-';
+        const randomPass = crypto.randomBytes(16).toString('hex');
+        const hashedPassword = await bcrypt.hash(randomPass, 10);
+
+        try {
+          user = await this.prisma.user.create({
+            data: {
+              username: cleanUsername,
+              email: email || `${cleanUsername}@waapps.net`,
+              password: hashedPassword,
+              firstName,
+              lastName,
+              role: isRoleAdmin ? Role.ADMIN : Role.USER,
+              status: 'active',
+              isAdAuth: true,
+              department: claims.department || 'Window Asia',
+              position: claims.position || 'Staff',
+              passwordChangedAt: new Date(),
+              mustChangePassword: false,
+            },
+          });
+
+          await this.transactionLogsService.recordLog({
+            category: 'ciam_sso',
+            action: 'auto_provision_user',
+            status: 'info',
+            message: `สร้างบัญชีผู้ใช้ใหม่อัตโนมัติจาก Central IAM: '${cleanUsername}'`,
+            details: { username: cleanUsername, email, group_assigned: defaultGroup, claims },
+            triggeredBy: 'system:ciam',
+          });
+        } catch (createErr: any) {
+          this.logger.warn(`Auto-provisioning race condition or conflict for ${cleanUsername}: ${createErr.message}`);
+          user = await this.prisma.user.findFirst({
+            where: {
+              OR: [
+                { username: { equals: cleanUsername, mode: Prisma.QueryMode.insensitive } },
+                ...(email ? [{ email: { equals: String(email).trim(), mode: Prisma.QueryMode.insensitive } }] : []),
+              ],
+            },
+          });
+          if (!user) {
+            throw new InternalServerErrorException(`ไม่สามารถสร้างบัญชีผู้ใช้ใหม่สำหรับ '${cleanUsername}' ได้: ${createErr.message}`);
+          }
+        }
+      }
+
+      // 4. Issue WorkSync Session Token
+      const tokenData = await this.authService.login(user);
+
+      // 5. Record SSO-01 Login Success
       await this.transactionLogsService.recordLog({
         category: 'ciam_sso',
-        action: 'auto_provision_user',
-        status: 'info',
-        message: `สร้างบัญชีผู้ใช้ใหม่อัตโนมัติจาก Central IAM: '${username}'`,
-        details: { username, email, group_assigned: defaultGroup, claims },
-        triggeredBy: 'system:ciam',
+        action: 'login_success',
+        status: 'success',
+        message: `เข้าสู่ระบบผ่าน Central IAM SSO สำเร็จ: ผู้ใช้ '${cleanUsername}'`,
+        details: {
+          username: cleanUsername,
+          ip,
+          ciam_issuer: baseUrl,
+          auth_method: 'OIDC_PKCE_S256',
+          role: user.role,
+        },
+        triggeredBy: `user:${cleanUsername}`,
       });
+
+      return {
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        token_type: 'bearer',
+        user: this.authService.formatUser(user),
+      };
+    } catch (err: any) {
+      this.logger.error(`[CIAM SSO Callback Error] ${err.message}`, err.stack);
+      if (err instanceof HttpException) {
+        throw err;
+      }
+      throw new InternalServerErrorException(
+        `การยืนยันตัวตน SSO ล้มเหลว (${err.message || 'เกิดข้อผิดพลาดในการประมวลผลข้อมูลผู้ใช้งาน'})`
+      );
     }
-
-    // 4. Issue WorkSync Session Token
-    const tokenData = await this.authService.login(user);
-
-    // 5. Record SSO-01 Login Success
-    await this.transactionLogsService.recordLog({
-      category: 'ciam_sso',
-      action: 'login_success',
-      status: 'success',
-      message: `เข้าสู่ระบบผ่าน Central IAM SSO สำเร็จ: ผู้ใช้ '${username}'`,
-      details: {
-        username,
-        ip,
-        ciam_issuer: baseUrl,
-        auth_method: 'OIDC_PKCE_S256',
-        role: user.role,
-      },
-      triggeredBy: `user:${username}`,
-    });
-
-    return {
-      access_token: tokenData.access_token,
-      refresh_token: tokenData.refresh_token,
-      token_type: 'bearer',
-      user: this.authService.formatUser(user),
-    };
   }
 
   // ─── Break-Glass Toggle ─────────────────────────────────────────────────

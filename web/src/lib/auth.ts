@@ -467,8 +467,15 @@ export async function ssoCallback(code: string, codeVerifier: string, redirectUr
     body: JSON.stringify({ code, code_verifier: codeVerifier, redirect_uri: redirectUri }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || 'การยืนยันตัวตน SSO ล้มเหลว');
+    let errorMsg = 'การยืนยันตัวตน SSO ล้มเหลว';
+    try {
+      const err = await res.json();
+      errorMsg = err.message || err.error_description || errorMsg;
+    } catch {
+      const text = await res.text().catch(() => '');
+      if (text) errorMsg = text;
+    }
+    throw new Error(errorMsg);
   }
   return await res.json();
 }

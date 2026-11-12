@@ -359,31 +359,60 @@ export class AuthService {
   }
 
   // Format prisma user object to snake_case for frontend compatibility
-  formatUser(user: User) {
+  formatUser(user: any) {
+    if (!user) return null;
+
+    const isAd = Boolean(user.isAdAuth);
+    let mustChange = false;
+    let isExpired = false;
+    let daysLeft = 90;
+
+    if (!isAd) {
+      try {
+        const expiry = checkPasswordExpiry(user.passwordChangedAt, user.createdAt);
+        isExpired = expiry.expired;
+        daysLeft = expiry.daysLeft;
+        mustChange = Boolean(user.mustChangePassword) || isExpired;
+      } catch {
+        mustChange = false;
+        isExpired = false;
+      }
+    }
+
+    let roleName = 'User';
+    let roleId = 'user';
+    const roleStr = typeof user.role === 'string' ? user.role : (user.role?.name || 'USER');
+    if (roleStr === 'ADMIN' || roleStr === 'Administrator') {
+      roleName = 'Administrator';
+      roleId = 'f9826f7f-a8b9-4fe0-9d61-3047fbc101f0';
+    }
+
     return {
       id: user.id,
       email: user.email,
       username: user.username,
-      first_name: user.firstName,
-      last_name: user.lastName,
-      nickname: user.nickname,
-      status: user.status,
+      first_name: user.firstName || '',
+      last_name: user.lastName || '',
+      nickname: user.nickname || null,
+      status: user.status || 'active',
       role: {
-        id: user.role === 'ADMIN' ? 'f9826f7f-a8b9-4fe0-9d61-3047fbc101f0' : 'user',
-        name: user.role === 'ADMIN' ? 'Administrator' : 'User',
+        id: roleId,
+        name: roleName,
       },
-      department: user.department,
-      position: user.position,
-      avatar_url: user.avatarUrl,
-      telegram_id: user.telegramId,
-      is_ad_auth: (user as any).isAdAuth ?? false,
-      must_change_password: Boolean((user as any).mustChangePassword) || checkPasswordExpiry((user as any).passwordChangedAt, user.createdAt).expired,
-      password_expired: checkPasswordExpiry((user as any).passwordChangedAt, user.createdAt).expired,
-      days_left: checkPasswordExpiry((user as any).passwordChangedAt, user.createdAt).daysLeft,
-      email_digest_enabled: (user as any).emailDigestEnabled ?? false,
-      email_digest_time: (user as any).emailDigestTime ?? '08:30',
-      email_digest_types: (user as any).emailDigestTypes ?? ['my_tasks', 'involved_tasks', 'assigned_by_me'],
-      last_access: (user as any).lastAccess ? (user as any).lastAccess.toISOString() : null,
+      department: user.department || null,
+      position: user.position || null,
+      avatar_url: user.avatarUrl || null,
+      telegram_id: user.telegramId || null,
+      is_ad_auth: isAd,
+      must_change_password: mustChange,
+      password_expired: isExpired,
+      days_left: daysLeft,
+      email_digest_enabled: Boolean(user.emailDigestEnabled),
+      email_digest_time: user.emailDigestTime || '08:30',
+      email_digest_types: user.emailDigestTypes || ['my_tasks', 'involved_tasks', 'assigned_by_me'],
+      last_access: user.lastAccess
+        ? (user.lastAccess instanceof Date ? user.lastAccess.toISOString() : String(user.lastAccess))
+        : null,
     };
   }
 
