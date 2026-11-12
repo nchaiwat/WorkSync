@@ -1,7 +1,20 @@
-import { Controller, Post, Get, Body, Req, UseGuards, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Req,
+  Res,
+  UseGuards,
+  UnauthorizedException,
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { BotDefenseService } from './bot-defense.service';
 import * as express from 'express';
 
 @Controller()
@@ -9,12 +22,35 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly usersService: UsersService,
+    private readonly botDefenseService: BotDefenseService,
   ) {}
 
-  @Post('auth/login')
-  async login(@Body() body: any, @Req() req: express.Request) {
+  @Post(['auth/login', 'api/auth/login'])
+  async login(
+    @Body() body: any,
+    @Req() req: express.Request,
+    @Res({ passthrough: true }) res: express.Response,
+  ) {
     const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || 'unknown';
     const ip = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : 'unknown';
+
+    // ─── หมวด F: Enterprise In-App Bot Defense 3 ชั้น (v2.10.0) ───────────
+    const botCheck = await this.botDefenseService.checkBotDefense(ip, {
+      corporate_fax: body.corporate_fax,
+      security_honey: body.security_honey,
+      form_render_ts: body.form_render_ts,
+      username: body.email,
+    });
+
+    if (!botCheck.allowed) {
+      if (botCheck.retryAfter) {
+        res.setHeader('Retry-After', String(botCheck.retryAfter));
+      }
+      throw new HttpException(
+        { detail: botCheck.message || 'คำขอไม่ถูกต้อง' },
+        botCheck.statusCode || HttpStatus.BAD_REQUEST,
+      );
+    }
 
     const user = await this.authService.validateUser(
       body.email,
@@ -32,6 +68,30 @@ export class AuthController {
 
     const tokenData = await this.authService.login(user);
     return { data: tokenData };
+  }
+
+  // ─── หมวด G: เปลี่ยนรหัสผ่านบัญชีท้องถิ่น (v2.12.0) ─────────────────────
+  @UseGuards(JwtAuthGuard)
+  @Post(['auth/local/change-password', 'api/auth/local/change-password', 'auth/change-password'])
+  async changePassword(@Body() body: any, @Req() req: express.Request) {
+    const user = req.user as any;
+    if (!user || !user.id) {
+      throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อนเปลี่ยนรหัสผ่าน');
+    }
+
+    if (!body?.old_password || !body?.new_password) {
+      throw new BadRequestException('กรุณาระบุรหัสผ่านเดิมและรหัสผ่านใหม่');
+    }
+
+    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || 'unknown';
+    const ip = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : 'unknown';
+
+    return await this.authService.changeLocalPassword(
+      user.id,
+      body.old_password,
+      body.new_password,
+      ip,
+    );
   }
 
   @Post('auth/login-pin')

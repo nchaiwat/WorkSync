@@ -18,14 +18,36 @@ export function getOrCreateDeviceToken(): string {
   return token;
 }
 
-export async function login(identifier: string, password: string, authType: 'ad' | 'local' = 'local') {
+export async function login(
+  identifier: string,
+  password: string,
+  authType: 'ad' | 'local' = 'local',
+  botDefense?: {
+    corporate_fax?: string;
+    security_honey?: string;
+    form_render_ts?: number;
+  },
+) {
   const device_token = getOrCreateDeviceToken();
   
   // NestJS backend accepts username or email in the email field.
+  const payload: any = {
+    email: identifier,
+    password,
+    device_token,
+    auth_type: authType,
+  };
+
+  if (botDefense) {
+    if (botDefense.corporate_fax) payload.corporate_fax = botDefense.corporate_fax;
+    if (botDefense.security_honey) payload.security_honey = botDefense.security_honey;
+    if (botDefense.form_render_ts) payload.form_render_ts = botDefense.form_render_ts;
+  }
+
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: identifier, password, device_token, auth_type: authType }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
@@ -34,7 +56,7 @@ export async function login(identifier: string, password: string, authType: 'ad'
       const contentType = res.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const error = await res.json();
-        errorMsg = error.message || error.errors?.[0]?.message || errorMsg;
+        errorMsg = error.detail || error.message || error.errors?.[0]?.message || errorMsg;
       } else {
         const text = await res.text();
         if (text) errorMsg = text;
@@ -55,6 +77,29 @@ export async function login(identifier: string, password: string, authType: 'ad'
   }
   
   return data.data;
+}
+
+export async function changeLocalPassword(oldPassword: string, newPassword: string, token?: string) {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const authToken = token || getAuthToken();
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_BASE}/auth/local/change-password`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+  });
+
+  if (!res.ok) {
+    let errorMsg = 'เปลี่ยนรหัสผ่านไม่สำเร็จ';
+    try {
+      const error = await res.json();
+      errorMsg = error.message || error.detail || errorMsg;
+    } catch {}
+    throw new Error(errorMsg);
+  }
+
+  return await res.json();
 }
 
 export async function loginPin(username: string, pin: string, deviceToken: string) {
@@ -318,6 +363,45 @@ export const admin = {
     });
     if (!res.ok) {
       throw new Error('ไม่สามารถดึงข้อมูล Transaction Logs ได้');
+    }
+    return await res.json();
+  },
+
+  // ─── AI Copilot Admin Methods (Section 11 / v2.8.0 / v2.12.0) ───────────
+  async getAiSettings(token: string) {
+    const res = await fetch(`${API_BASE}/settings/ai`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      throw new Error('ไม่สามารถดึงข้อมูลการตั้งค่า AI Copilot ได้');
+    }
+    return await res.json();
+  },
+
+  async updateAiSettings(token: string, settings: any) {
+    const res = await fetch(`${API_BASE}/settings/ai`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(settings),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'บันทึกการตั้งค่า AI Copilot ไม่สำเร็จ');
+    }
+    return await res.json();
+  },
+
+  async testAiConnection(token: string) {
+    const res = await fetch(`${API_BASE}/settings/ai/test`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'ทดสอบเชื่อมต่อ AI API ไม่สำเร็จ');
     }
     return await res.json();
   },

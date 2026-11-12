@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 import { SettingsService } from '../settings/settings.service';
 import { TransactionLogsService } from '../transaction-logs/transaction-logs.service';
+import { validatePasswordComplexity, checkPasswordExpiry } from './password-policy';
 
 @Injectable()
 export class AuthService {
@@ -211,10 +212,22 @@ export class AuthService {
     if (isMatch) {
       await this.recordLoginLog(user.username, 'LOCAL', ipAddress, 'ACCEPT', 'เข้าสู่ระบบสำเร็จ');
       await this.checkAndRecordBreakGlassLogin(user.username, ipAddress);
-      const { password, ...result } = user;
-      return result;
-    }
 
+      // Check 90-Day Forced Password Rotation (Section 13 / v2.12.0)
+      const { expired, daysLeft } = checkPasswordExpiry(
+        (user as any).passwordChangedAt,
+        user.createdAt,
+      );
+      const mustChange = Boolean((user as any).mustChangePassword) || expired;
+
+      const { password, ...result } = user;
+      return {
+        ...result,
+        must_change_password: mustChange,
+        password_expired: expired,
+        days_left: daysLeft,
+      };
+    }
 
     await this.recordLoginLog(user.username, 'LOCAL', ipAddress, 'REJECT', 'รหัสผ่านไม่ถูกต้อง');
     return null;
@@ -254,6 +267,94 @@ export class AuthService {
       access_token: this.jwtService.sign(payload),
       refresh_token: this.jwtService.sign(payload, { expiresIn: '7d' }),
       expires: 3600 * 1000, // 1 hour in ms
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        first_name: user.firstName,
+        last_name: user.lastName,
+        role: user.role,
+        must_change_password: Boolean(user.must_change_password),
+        password_expired: Boolean(user.password_expired),
+        days_left: user.days_left ?? 90,
+      },
+      must_change_password: Boolean(user.must_change_password),
+      password_expired: Boolean(user.password_expired),
+      days_left: user.days_left ?? 90,
+    };
+  }
+
+  // ─── Local Password Policy: Change Password (v2.12.0) ────────────────────
+  async changeLocalPassword(
+    userId: string,
+    oldPass: string,
+    newPass: string,
+    ipAddress: string = 'unknown',
+  ) {
+    const user = await this.usersService.findOneById(userId);
+    if (!user) {
+      throw new UnauthorizedException('ไม่พบผู้ใช้งานนี้ในระบบ');
+    }
+
+    // 1. Verify old password
+    const isOldMatch = await bcrypt.compare(oldPass, user.password);
+    if (!isOldMatch) {
+      await this.transactionLogsService.recordLog({
+        category: 'security_password',
+        action: 'change_password_failed',
+        status: 'failed',
+        message: `เปลี่ยนรหัสผ่านไม่สำเร็จ: รหัสผ่านเดิมไม่ถูกต้องสำหรับ '${user.username}'`,
+        details: { username: user.username, ip: ipAddress, reason: 'InvalidOldPassword' },
+        triggeredBy: `user:${user.username}`,
+      });
+      throw new BadRequestException('รหัสผ่านเดิมไม่ถูกต้อง');
+    }
+
+    // 2. Validate complexity standard (Section 13.1)
+    const complexity = validatePasswordComplexity(newPass, user.username);
+    if (!complexity.valid) {
+      await this.transactionLogsService.recordLog({
+        category: 'security_password',
+        action: 'change_password_failed',
+        status: 'failed',
+        message: `เปลี่ยนรหัสผ่านไม่สำเร็จ: รหัสผ่านใหม่ไม่ผ่านเกณฑ์ความซับซ้อน (${complexity.error})`,
+        details: { username: user.username, ip: ipAddress, error: complexity.error },
+        triggeredBy: `user:${user.username}`,
+      });
+      throw new BadRequestException(complexity.error || 'รหัสผ่านใหม่ไม่ผ่านเกณฑ์ความซับซ้อน');
+    }
+
+    // 3. Hash and save new password
+    const hashedPassword = await bcrypt.hash(newPass.trim(), 10);
+    const now = new Date();
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        passwordChangedAt: now,
+        mustChangePassword: false,
+      },
+    });
+
+    // 4. Audit log
+    await this.transactionLogsService.recordLog({
+      category: 'security_password',
+      action: 'change_local_password',
+      status: 'success',
+      message: `เปลี่ยนรหัสผ่านบัญชีท้องถิ่นสำเร็จสำหรับ '${user.username}' (มีอายุ 90 วัน)`,
+      details: {
+        username: user.username,
+        ip: ipAddress,
+        password_changed_at: now.toISOString(),
+      },
+      triggeredBy: `user:${user.username}`,
+    });
+
+    return {
+      status: 'SUCCESS',
+      message: 'เปลี่ยนรหัสผ่านเรียบร้อยแล้ว (มีอายุ 90 วัน)',
+      password_changed_at: now,
+      must_change_password: false,
     };
   }
 
@@ -276,6 +377,9 @@ export class AuthService {
       avatar_url: user.avatarUrl,
       telegram_id: user.telegramId,
       is_ad_auth: (user as any).isAdAuth ?? false,
+      must_change_password: Boolean((user as any).mustChangePassword) || checkPasswordExpiry((user as any).passwordChangedAt, user.createdAt).expired,
+      password_expired: checkPasswordExpiry((user as any).passwordChangedAt, user.createdAt).expired,
+      days_left: checkPasswordExpiry((user as any).passwordChangedAt, user.createdAt).daysLeft,
       email_digest_enabled: (user as any).emailDigestEnabled ?? false,
       email_digest_time: (user as any).emailDigestTime ?? '08:30',
       email_digest_types: (user as any).emailDigestTypes ?? ['my_tasks', 'involved_tasks', 'assigned_by_me'],

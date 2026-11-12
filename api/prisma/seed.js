@@ -40,6 +40,14 @@ async function main() {
     { key: 'ciam_auto_provision_group', value: 'User', description: 'ชื่อกลุ่มสิทธิ์เริ่มต้นสำหรับพนักงานใหม่ที่ล็อกอินผ่าน SSO ครั้งแรก', category: 'central_iam', dataType: 'string' },
     { key: 'ciam_session_ttl_minutes', value: '480', description: 'อายุ Access Token ของระบบลูก (ค่าแนะนำ: 8 ชั่วโมง / 480 นาที)', category: 'central_iam', dataType: 'integer' },
     { key: 'ciam_m2m_key', value: 'sec_worksync_m2m_key_2026', description: 'รหัสผ่าน Management API Key สำหรับ Central IAM M2M Communication', category: 'central_iam', dataType: 'encrypted' },
+    // AI Copilot Settings (Section 2.1 / v2.8.0 / v2.12.0)
+    { key: 'ai_copilot_enabled', value: 'false', description: 'สวิตช์หลักเปิด/ปิดการแสดงผลผู้ช่วย AI Copilot ประจำระบบ', category: 'ai_copilot', dataType: 'boolean' },
+    { key: 'ai_provider', value: 'google', description: 'ผู้ให้บริการ AI: google, openai, anthropic, ollama, custom', category: 'ai_copilot', dataType: 'string' },
+    { key: 'ai_model', value: 'gemini-2.5-flash', description: 'รหัสโมเดล AI', category: 'ai_copilot', dataType: 'string' },
+    { key: 'ai_api_key', value: '', description: 'API Key ของผู้ให้บริการ AI (Masked)', category: 'ai_copilot', dataType: 'encrypted' },
+    { key: 'ai_base_url', value: '', description: 'Endpoint URL กำหนดเอง (กรณีใช้ Ollama หรือ Private LLM Proxy)', category: 'ai_copilot', dataType: 'string' },
+    { key: 'ai_system_prompt', value: 'คุณคือ WorkSync Copilot ผู้ช่วย AI อัจฉริยะประจำระบบติดตามงาน WorkSync ของบริษัท วินโดว์ เอเชีย จำกัด (มหาชน) ให้ตอบคำถามและวิเคราะห์ข้อมูลงานด้วยความสุภาพ ถูกต้อง แม่นยำ และกระชับตามหลักความปลอดภัย Read-Only 100%', description: 'ข้อความกำกับบทบาทและข้อจำกัดความปลอดภัยของ AI', category: 'ai_copilot', dataType: 'string' },
+    { key: 'ai_allow_mcp_tools', value: 'true', description: 'สวิตช์อนุญาตให้ AI เรียกใช้งาน Tools กลาง', category: 'ai_copilot', dataType: 'boolean' },
   ];
 
   for (const s of defaultSettings) {

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import WorkSyncCopilotWidget from '@/components/WorkSyncCopilotWidget';
 
 export const metadata: Metadata = {
   title: 'WorkSync — Enterprise Task & Collaboration',
@@ -61,6 +62,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen overflow-x-hidden antialiased bg-[#F2F2F7] dark:bg-[#0B0F19] text-slate-900 dark:text-slate-100 transition-colors">
         {children}
+        <WorkSyncCopilotWidget />
       </body>
     </html>
   );

@@ -1,7 +1,8 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, User, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { validatePasswordComplexity } from '../auth/password-policy';
 
 @Injectable()
 export class UsersService {
@@ -24,11 +25,21 @@ export class UsersService {
       throw new ConflictException('ชื่อผู้ใช้นี้ถูกใช้งานแล้ว');
     }
 
+    // Validate complexity for local accounts if not AD
+    if (!data.isAdAuth && data.password && data.password.length < 30) {
+      const complexity = validatePasswordComplexity(data.password, data.username);
+      if (!complexity.valid) {
+        throw new BadRequestException(complexity.error || 'รหัสผ่านไม่ผ่านเกณฑ์ความซับซ้อน');
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(data.password, 10);
     return this.prisma.user.create({
       data: {
         ...data,
         password: hashedPassword,
+        passwordChangedAt: new Date(),
+        mustChangePassword: !data.isAdAuth, // Require local accounts to change on first login
       },
     });
   }
@@ -63,9 +74,17 @@ export class UsersService {
       throw new NotFoundException('ไม่พบผู้ใช้งาน');
     }
 
-    const updateData = { ...data };
+    const updateData: any = { ...data };
     if (updateData.password && typeof updateData.password === 'string') {
+      if (!user.isAdAuth && updateData.password.length < 30) {
+        const complexity = validatePasswordComplexity(updateData.password, user.username);
+        if (!complexity.valid) {
+          throw new BadRequestException(complexity.error || 'รหัสผ่านไม่ผ่านเกณฑ์ความซับซ้อน');
+        }
+      }
       updateData.password = await bcrypt.hash(updateData.password, 10);
+      updateData.passwordChangedAt = new Date();
+      updateData.mustChangePassword = false;
     }
     if (updateData.pinCode && typeof updateData.pinCode === 'string') {
       updateData.pinCode = await bcrypt.hash(updateData.pinCode, 10);

@@ -59,14 +59,26 @@
 
 ---
 
-## 🔐 5. Central IAM SSO (v2.0.0 Zero `.env` Architecture)
-- **Dynamic Config**: All OIDC and SSO configuration parameters reside in the `system_settings` table (managed via `SettingsService` with an in-memory cache).
+## 🔐 5. Central IAM Integration & Enterprise Security Standards (v2.12.0)
+- **Dynamic Config**: All OIDC, SSO, and AI Copilot configuration parameters reside in the `system_settings` table (managed via `SettingsService` with an in-memory cache).
 - **Dual Flow Support**:
   - **SP-Initiated SSO**: ผู้ใช้กดล็อกอินจากหน้าเว็บ WorkSync จะสร้าง `code_verifier` (PKCE) เก็บใน `sessionStorage`
-  - **IdP-Initiated SSO (Portal Launch)**: ผู้ใช้กดเปิดแอปจากหน้า Central IAM Portal (`ciam.windowasia.com/portal`) จะไม่มี `code_verifier` ดังนั้น Backend ต้องรองรับแบบ `code_verifier` เป็น optional และใช้ `client_id` + `client_secret` ในการแลกรับ Token
-- **Zero-Confusion Standard**: เมื่อ `ciam_sso_enabled` is false, `/login` immediately behaves as a 100% clean standard credentials form with no SSO elements.
-- **Cache-Busting**: When fetching `/settings/ciam-sso` or `/auth/sso/config`, include `_t=${Date.now()}` query param and `cache: 'no-store'` header to ensure immediate toggle responsiveness.
-- **Audit Trails**: Major security actions (logins, settings changes, break-glass toggles) are recorded into `transaction_logs` via `TransactionLogsService`.
+  - **IdP-Initiated SSO (Portal Launch & RFC 9700 Bounce)**: ผู้ใช้กดเปิดแอปจากการ์ด Portal จะเข้าสู่ `/auth/start` ซึ่งจะผูก PKCE/State ใน Session เบราว์เซอร์ แล้วเด้ง 302 ไปยัง CIAM Authorize URL
+- **Zero-Confusion & Responsive Login (v2.12.0)**: 
+  - บน Desktop: ปุ่ม SSO ขนาดย่อมด้านบนฟอร์ม คั่นด้วยเส้นแบ่งตามด้วยฟอร์มมาตรฐาน
+  - บน Mobile: ฟอร์มมาตรฐานแสดงเด่นชัด 100% พร้อมปุ่ม SSO ขนาดย่อมด้านล่างสุด
+  - เมื่อ `ciam_sso_enabled = false`: ซ่อนปุ่ม SSO และเส้นแบ่งทั้งหมด 100%
+- **Enterprise Local Password Policy (Section 13 / v2.12.0)**:
+  - ความซับซ้อน 8-16 ตัวอักษร, พิมพ์ใหญ่, พิมพ์เล็ก, ตัวเลข, อักขระพิเศษ, ห้ามมี Username
+  - บังคับเปลี่ยนรหัสผ่านทุก 90 วัน (`must_change_password`) โดยบล็อกหน้าระบบและเปิด `ForcedPasswordChangeModal`
+- **Enterprise 3-Layer In-App Bot Defense (Section 12 / v2.10.0)**:
+  - Layer 1: Sliding-Window IP Rate Limiter (10 req/min ต่อ IP พร้อม Whitelist IP องค์กร)
+  - Layer 2: Decoy Honeypot Trap (`corporate_fax`, `security_honey`)
+  - Layer 3: Submission Velocity Guard (`now - form_render_ts < 400ms`)
+- **In-App AI Copilot (Section 11 / v2.8.0)**:
+  - Strict Read-Only & Zero-Mutation (ห้ามสร้าง แก้ไข ลบข้อมูล)
+  - Zero-Training & DLP Header Scrubber (`X-No-Model-Training: true`, `store: false`)
+- **Audit Trails**: Major security actions (logins, settings changes, break-glass toggles, password rotations, bot defense events) are recorded into `transaction_logs` via `TransactionLogsService`.
 
 ---
 

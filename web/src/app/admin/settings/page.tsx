@@ -93,6 +93,24 @@ export default function AdminSettingsPage() {
   const [smtpSuccess, setSmtpSuccess] = useState('');
   const [smtpError, setSmtpError] = useState('');
 
+  // AI Copilot Configuration State (Section 11 / v2.8.0 / v2.12.0)
+  const [aiSettings, setAiSettings] = useState({
+    enabled: false,
+    provider: 'google',
+    model: 'gemini-2.5-flash',
+    api_key_masked: '',
+    base_url: '',
+    system_prompt: 'คุณคือ WorkSync Copilot ผู้ช่วย AI อัจฉริยะประจำระบบติดตามงาน WorkSync ของบริษัท วินโดว์ เอเชีย จำกัด (มหาชน)',
+    allow_mcp_tools: true,
+  });
+  const [aiApiKey, setAiApiKey] = useState('');
+  const [showAiApiKey, setShowAiApiKey] = useState(false);
+  const [isSavingAi, setIsSavingAi] = useState(false);
+  const [isTestingAi, setIsTestingAi] = useState(false);
+  const [aiSuccess, setAiSuccess] = useState('');
+  const [aiError, setAiError] = useState('');
+  const [aiTestResult, setAiTestResult] = useState<{ status: string; latency_ms?: number; message: string } | null>(null);
+
   useEffect(() => {
     checkAdmin();
   }, []);
@@ -145,6 +163,24 @@ export default function AdminSettingsPage() {
             smtp_port: smtpRes.settings.smtp_port || 587,
             smtp_sender_email: smtpRes.settings.smtp_sender_email || 'itwindowasia@gmail.com',
             smtp_password_masked: smtpRes.settings.smtp_password_masked || '',
+          });
+        }
+      } catch (e) {
+        // partial fail ok
+      }
+
+      // Load AI Settings
+      try {
+        const aiRes = await admin.getAiSettings(token);
+        if (aiRes?.settings) {
+          setAiSettings({
+            enabled: Boolean(aiRes.settings.enabled),
+            provider: aiRes.settings.provider || 'google',
+            model: aiRes.settings.model || 'gemini-2.5-flash',
+            api_key_masked: aiRes.settings.api_key_masked || '',
+            base_url: aiRes.settings.base_url || '',
+            system_prompt: aiRes.settings.system_prompt || '',
+            allow_mcp_tools: Boolean(aiRes.settings.allow_mcp_tools),
           });
         }
       } catch (e) {
@@ -216,6 +252,74 @@ export default function AdminSettingsPage() {
       setSmtpError(err.message || 'เกิดข้อผิดพลาดในการส่งอีเมลทดสอบ');
     } finally {
       setIsTestingSmtp(false);
+    }
+  };
+
+  const handleSaveAi = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const token = getAuthToken();
+    if (!token) return;
+
+    setIsSavingAi(true);
+    setAiError('');
+    setAiSuccess('');
+
+    try {
+      const payload: any = {
+        enabled: aiSettings.enabled,
+        provider: aiSettings.provider,
+        model: aiSettings.model,
+        base_url: aiSettings.base_url,
+        system_prompt: aiSettings.system_prompt,
+        allow_mcp_tools: aiSettings.allow_mcp_tools,
+      };
+      if (aiApiKey.trim()) {
+        payload.api_key = aiApiKey.trim();
+      }
+
+      await admin.updateAiSettings(token, payload);
+      setAiSuccess('บันทึกการตั้งค่า AI Copilot เรียบร้อยแล้ว');
+      const updated = await admin.getAiSettings(token);
+      if (updated?.settings) {
+        setAiSettings({
+          enabled: Boolean(updated.settings.enabled),
+          provider: updated.settings.provider,
+          model: updated.settings.model,
+          api_key_masked: updated.settings.api_key_masked || '',
+          base_url: updated.settings.base_url || '',
+          system_prompt: updated.settings.system_prompt || '',
+          allow_mcp_tools: Boolean(updated.settings.allow_mcp_tools),
+        });
+        setAiApiKey('');
+      }
+    } catch (err: any) {
+      setAiError(err.message || 'บันทึกการตั้งค่า AI Copilot ไม่สำเร็จ');
+    } finally {
+      setIsSavingAi(false);
+    }
+  };
+
+  const handleTestAi = async () => {
+    const token = getAuthToken();
+    if (!token) return;
+
+    setIsTestingAi(true);
+    setAiError('');
+    setAiSuccess('');
+    setAiTestResult(null);
+
+    try {
+      const res = await admin.testAiConnection(token);
+      setAiTestResult(res);
+      if (res.status === 'connected') {
+        setAiSuccess(`เชื่อมต่อ AI สำเร็จ! Latency: ${res.latency_ms || 0}ms`);
+      } else {
+        setAiError(res.message || 'ทดสอบเชื่อมต่อไม่สำเร็จ');
+      }
+    } catch (err: any) {
+      setAiError(err.message || 'เกิดข้อผิดพลาดในการทดสอบเชื่อมต่อ AI');
+    } finally {
+      setIsTestingAi(false);
     }
   };
 
@@ -668,7 +772,156 @@ export default function AdminSettingsPage() {
           </form>
         </section>
 
-        {/* 3. Settings Form (Zero .env) */}
+        {/* 3. ตั้งค่าผู้ช่วย AI Copilot (Section 11 / v2.8.0 / v2.12.0) */}
+        <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-3 border-b border-gray-100 dark:border-slate-700">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <span>🤖</span> 3. ผู้ช่วยอัจฉริยะส่วนตัว (In-App AI Copilot)
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                กำหนดค่าผู้ช่วย AI ประจำระบบ WorkSync (ทำงานภายใต้นโยบาย Strict Read-Only & Zero-Training ตามมาตรฐาน ISO 27001)
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleTestAi}
+                disabled={isTestingAi}
+                className="px-3.5 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-semibold transition-all shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {isTestingAi ? (
+                  <span className="flex items-center gap-1.5">
+                    <span className="animate-spin text-xs">⏳</span> กำลังทดสอบ...
+                  </span>
+                ) : (
+                  <>
+                    <span>⚡</span> ทดสอบเชื่อมต่อ AI API
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {aiSuccess && (
+            <div className="mb-4 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 text-xs p-3 rounded-xl flex items-center gap-2">
+              <span>✅</span> {aiSuccess}
+            </div>
+          )}
+
+          {aiError && (
+            <div className="mb-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs p-3 rounded-xl flex items-center gap-2">
+              <span>⚠️</span> {aiError}
+            </div>
+          )}
+
+          <form onSubmit={handleSaveAi} className="space-y-4">
+            {/* Toggle Enable */}
+            <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700">
+              <div>
+                <label className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  เปิดใช้งาน WorkSync AI Copilot (Floating Widget)
+                </label>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                  เมื่อปิดสวิตช์นี้ ไอคอนแชท AI จะถูกซ่อนออกจากหน้าจอผู้ใช้งานทุกคนโดยอัตโนมัติ 100%
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={aiSettings.enabled}
+                  onChange={(e) => setAiSettings({ ...aiSettings, enabled: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  AI Provider
+                </label>
+                <select
+                  value={aiSettings.provider}
+                  onChange={(e) => setAiSettings({ ...aiSettings, provider: e.target.value })}
+                  className="w-full px-3.5 py-2 text-sm border border-gray-200 dark:border-slate-600 rounded-xl bg-gray-50/50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="google">Google Gemini (Enterprise API)</option>
+                  <option value="openai">OpenAI (ChatGPT Enterprise)</option>
+                  <option value="anthropic">Anthropic Claude</option>
+                  <option value="ollama">Ollama (On-Prem Local LLM)</option>
+                  <option value="custom">Custom Private LLM Proxy</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  AI Model
+                </label>
+                <input
+                  type="text"
+                  value={aiSettings.model}
+                  onChange={(e) => setAiSettings({ ...aiSettings, model: e.target.value })}
+                  placeholder="gemini-2.5-flash"
+                  className="w-full px-3.5 py-2 text-sm border border-gray-200 dark:border-slate-600 rounded-xl bg-gray-50/50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* API Key */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  AI API Key (Zero .env & Masked)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowAiApiKey(!showAiApiKey)}
+                  className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  {showAiApiKey ? '🙈 ซ่อน' : '👁️ แสดง'}
+                </button>
+              </div>
+              <input
+                type={showAiApiKey ? 'text' : 'password'}
+                value={aiApiKey}
+                onChange={(e) => setAiApiKey(e.target.value)}
+                placeholder={aiSettings.api_key_masked || 'ใส่ AI API Key เพื่อเปิดใช้งาน External LLM'}
+                className="w-full px-3.5 py-2 text-sm border border-gray-200 dark:border-slate-600 rounded-xl bg-gray-50/50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <span className="text-[11px] text-gray-400 mt-1 block">
+                หากเว้นว่างไว้ ระบบจะใช้ Local Intelligence Function ประมวลผลและตอบคำถามภายในองค์กร 100% โดยไม่มีค่าใช้จ่าย
+              </span>
+            </div>
+
+            {/* System Prompt */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                System Prompt (คำสั่งกำกับบทบาท AI)
+              </label>
+              <textarea
+                rows={3}
+                value={aiSettings.system_prompt}
+                onChange={(e) => setAiSettings({ ...aiSettings, system_prompt: e.target.value })}
+                className="w-full px-3.5 py-2 text-xs border border-gray-200 dark:border-slate-600 rounded-xl bg-gray-50/50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+              />
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="submit"
+                disabled={isSavingAi}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl text-xs font-semibold transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
+              >
+                {isSavingAi ? 'กำลังบันทึก...' : '💾 บันทึกการตั้งค่า AI Copilot'}
+              </button>
+            </div>
+          </form>
+        </section>
+
+        {/* 4. Settings Form (Zero .env) */}
         <section className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
           <div className="flex items-center justify-between mb-6 pb-3 border-b border-gray-100 dark:border-slate-700">
             <div>

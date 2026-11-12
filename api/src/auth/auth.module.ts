@@ -13,6 +13,7 @@ import { TransactionLogsModule } from '../transaction-logs/transaction-logs.modu
 import { TelegramModule } from '../telegram/telegram.module';
 import { CiamSsoService } from './ciam-sso.service';
 import { CiamSsoController } from './ciam-sso.controller';
+import { BotDefenseService } from './bot-defense.service';
 
 @Module({
   imports: [
@@ -32,9 +33,9 @@ import { CiamSsoController } from './ciam-sso.controller';
       inject: [ConfigService],
     }),
   ],
-  providers: [AuthService, JwtStrategy, CiamSsoService],
+  providers: [AuthService, JwtStrategy, CiamSsoService, BotDefenseService],
   controllers: [AuthController, CiamSsoController],
-  exports: [AuthService, CiamSsoService],
+  exports: [AuthService, CiamSsoService, BotDefenseService],
 })
 export class AuthModule {}
 

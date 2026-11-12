@@ -37,6 +37,10 @@ model User {
   emailDigestTypes   Json?     @default("[\"my_tasks\", \"involved_tasks\", \"assigned_by_me\"]") @map("email_digest_types")
   lastDigestSentAt   DateTime? @map("last_digest_sent_at")
 
+  // Local Password Policy (Section 13 / v2.12.0)
+  passwordChangedAt DateTime? @default(now()) @map("password_changed_at")
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   likes       TaskLike[]

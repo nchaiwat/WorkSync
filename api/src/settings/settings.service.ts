@@ -102,6 +102,25 @@ export class SettingsService implements OnModuleInit {
     return isNaN(n) ? defaultValue : n;
   }
 
+  async set(
+    key: string,
+    value: string,
+    category = 'general',
+    dataType = 'string',
+    description = '',
+  ): Promise<void> {
+    const row = await this.prisma.systemSetting.upsert({
+      where: { key },
+      create: { key, value, category, dataType, description },
+      update: { value, category, dataType },
+    });
+    this.cache.set(key, {
+      value: row.value,
+      dataType: row.dataType,
+      updatedAt: row.updatedAt,
+    });
+  }
+
   maskSecret(secret: string | null | undefined): string {
     if (!secret) return '';
     if (secret.length <= 8) return '****';

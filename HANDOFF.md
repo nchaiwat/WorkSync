@@ -1,6 +1,6 @@
 # WorkSync — Handover & Continuation Guide (HANDOFF.md)
-**อัปเดตล่าสุด:** 6 พฤศจิกายน 2026  
-**สถานะโปรเจกต์:** Production Ready / Enterprise v2.5.0 (Central IAM SSO + Multi-Perspective Dashboard + Real-Time Live Sync + Notification Center + SMTP Email Digest + PWA)
+**อัปเดตล่าสุด:** 12 พฤศจิกายน 2026  
+**สถานะโปรเจกต์:** Production Ready / Enterprise v2.12.0 (Central IAM v2.12.0 Full Compliance: 90-Day Local Password Policy & Complexity + 3-Layer In-App Bot Defense + In-App AI Copilot + Responsive Login + RFC 9700 Bounce)
 
 ---
 
@@ -118,6 +118,31 @@
 - ยิงพลุเฉลิมฉลอง Confetti + เสียงสังเคราะห์ Web Audio Chime + ระบบสั่น Haptic เมื่อทำภารกิจหรือ Checklist สำเร็จ 100%
 - บีบอัดรูปภาพแนบงานและรูปประจำตัวด้วย HTML5 Canvas อัตโนมัติก่อนอัปโหลด ช่วยลดขนาดไฟล์ภาพถ่ายจาก 8–10MB เหลือเพียง 200–400KB
 
+### 11. 🔒 Enterprise Local Password Policy & 90-Day Forced Rotation (หมวด G / v2.12.0)
+- บัญชีท้องถิ่น (Local Accounts) และบัญชีผู้ดูแลระบบฉุกเฉิน ต้องปฏิบัติตามมาตรฐานความซับซ้อน 6 ประการ:
+  1. ความยาว 8 - 16 ตัวอักษร
+  2. ตัวพิมพ์ใหญ่ (A-Z) >= 1
+  3. ตัวพิมพ์เล็ก (a-z) >= 1
+  4. ตัวเลข (0-9) >= 1
+  5. อักขระพิเศษ (!@#$%^&*...) >= 1
+  6. ห้ามมี Username ปะปน
+- บังคับหมุนเวียนรหัสผ่านทุกๆ 90 วัน (`(now - password_changed_at) >= 90 days`) หรือเมื่อ `must_change_password = true` โดยบล็อกการเข้าสู่หน้าระบบ และแสดง `ForcedPasswordChangeModal` บังคับเปลี่ยนทันที
+
+### 12. 🛡️ Enterprise In-App Bot Defense 3 ชั้น (หมวด F / v2.10.0)
+- **Layer 1:** Sliding-Window IP Rate Limiting (จำกัด 10 req/min ต่อ IP คืน Header `Retry-After: {sec}` พร้อม Whitelist IP องค์กร)
+- **Layer 2:** Decoy Honeypot Trap (ฟิลด์ดักบอทซ่อนสายตา `corporate_fax` และ `security_honey` ซ่อนด้วย CSS `left: -9999px` และ `aria-hidden`)
+- **Layer 3:** Submission Velocity & Timing Guard (ตรวจจับเวลาการส่งฟอร์ม `delta_ms < 400ms` เพื่อปฏิเสธ Script และ Bot อัตโนมัติ)
+
+### 13. 📱 Responsive Login UI (หมวด 5.2 / v2.12.0)
+- **Desktop:** แสดงปุ่ม SSO ขนาดย่อมด้านบนฟอร์ม คั่นด้วย `— หรือเข้าสู่ระบบด้วยชื่อผู้ใช้งาน —` พร้อมแสดงฟอร์มกรอกรหัสผ่านปกติทันที
+- **Mobile:** แสดงฟอร์มล็อกอินเดิมเด่นชัด 100% เป็น Primary CTA และมีปุ่ม SSO ขนาดย่อมด้านล่างสุด
+
+### 14. ⚡ RFC 9700 Seamless SSO Bounce (`/auth/start`) & Portal Launch
+- รองรับการเปิดแอปจากการ์ดบน Central IAM Portal ผ่าน SSO Start Endpoint (`/auth/start`) ซึ่งจะสร้าง `code_verifier` (PKCE S256) และ `state` ผูกกับเบราว์เซอร์อัตโนมัติ และเด้ง 302 ไปยัง CIAM Authorize URL
+
+### 15. 🤖 In-App AI Copilot ประจำระบบ WorkSync (หมวด E / v2.8.0)
+- ระบบผู้ช่วย AI วิเคราะห์และสรุปงานประจำระบบ ทำงานภายใต้นโยบาย **Strict Read-Only & Zero-Training 100%** (ไม่แก้ไขข้อมูล, ไม่นำข้อมูลไป Train โมเดล, แนบ Privacy Headers ครบถ้วน) พร้อม Local Rule-based Intelligence Fallback
+
 ---
 
 ## 🗄️ 4. โครงสร้างฐานข้อมูล (Database Schema)
@@ -125,7 +150,9 @@
 ไฟล์ Schema: [`api/prisma/schema.prisma`](file:///d:/Python/WorkSync/api/prisma/schema.prisma)
 
 ### ตารางหลักที่สำคัญ:
-- **`users`**: ข้อมูลผู้ใช้, สิทธิ์ (`ADMIN`/`USER`), แผนก, Telegram ID, PIN Code, และฟิลด์ Email Digest:
+- **`users`**: ข้อมูลผู้ใช้, สิทธิ์ (`ADMIN`/`USER`), แผนก, Telegram ID, PIN Code, Local Password Policy และ Email Digest:
+  - `passwordChangedAt` (DateTime @map("password_changed_at"))
+  - `mustChangePassword` (Boolean @map("must_change_password"))
   - `emailDigestEnabled` (Boolean)
   - `emailDigestTime` (String e.g. "08:30")
   - `emailDigestTypes` (Json)
@@ -136,7 +163,8 @@
 - **`task_likes`**: ประวัติการกดถูกใจภารกิจ
 - **`task_reads`**: ตรวจจับสถานะการเปิดอ่านของผู้ใช้แต่ละคน
 - **`system_settings`**: จัดเก็บคอนฟิก Dynamic Zero `.env`:
-  - Central IAM: `ciam_base_url`, `ciam_client_id`, `ciam_client_secret`, `ciam_sso_enabled`, `ciam_break_glass_active`, `ciam_ad_gateway_url`
+  - Central IAM: `ciam_base_url`, `ciam_client_id`, `ciam_client_secret`, `ciam_sso_enabled`, `ciam_break_glass_active`, `ciam_ad_gateway_url`, `ciam_m2m_key`
+  - AI Copilot: `ai_copilot_enabled`, `ai_provider`, `ai_model`, `ai_api_key`, `ai_base_url`, `ai_system_prompt`, `ai_allow_mcp_tools`
   - SMTP Email: `smtp_host`, `smtp_port`, `smtp_sender_email`, `smtp_password`
 - **`transaction_logs`**: บันทึก Audit Log ความปลอดภัย (ISO 27001)
 

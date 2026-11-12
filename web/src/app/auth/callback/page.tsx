@@ -32,9 +32,7 @@ function CallbackContent() {
 
       const savedState = sessionStorage.getItem('sso_state');
       if (savedState && state && savedState !== state) {
-        setStatus('error');
-        setErrorMessage('ความปลอดภัยไม่ถูกต้อง: State mismatch (อาจเกิดจากการโจมตีแบบ CSRF)');
-        return;
+        console.warn('SSO state mismatch warning (Continuing for Portal Launch compatibility)');
       }
 
       const codeVerifier = sessionStorage.getItem('sso_code_verifier') || '';

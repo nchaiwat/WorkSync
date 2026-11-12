@@ -12,6 +12,7 @@ import { TransactionLogsModule } from './transaction-logs/transaction-logs.modul
 import { DirectoryModule } from './directory/directory.module';
 import { EmailModule } from './email/email.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { AiModule } from './ai/ai.module';
 
 import { AppController } from './app.controller';
 
@@ -32,6 +33,7 @@ import { AppController } from './app.controller';
     DirectoryModule,
     EmailModule,
     NotificationsModule,
+    AiModule,
   ],
   controllers: [AppController],
 })
