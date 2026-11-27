@@ -7,6 +7,7 @@ import {
   Param,
   Query,
   Req,
+  Res,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -14,25 +15,27 @@ import {
 } from '@nestjs/common';
 import { DirectoryService, CreateAccountDto, UpdateStatusDto } from './directory.service';
 import { CiamM2mGuard } from './ciam-m2m.guard';
+import { CIAM_FRAMEWORK_VERSION, extractCiamOriginIp } from '../common/ip.util';
 import * as express from 'express';
 
-@Controller(['api/v1/directory', 'v1/directory'])
+@Controller(['api/v1/directory', 'v1/directory', 'api/directory', 'directory'])
 @UseGuards(CiamM2mGuard)
 export class DirectoryController {
   constructor(private readonly directoryService: DirectoryService) {}
 
   private getClientIp(req: express.Request): string {
-    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || 'unknown';
-    return typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : 'unknown';
+    return (req as any).ciamOriginIp || extractCiamOriginIp(req);
   }
 
   // ─── C.1 Directory Accounts (Ping, Health Check & 04:00 AM Sync) ───────────
   @Get('accounts')
   async listAccounts(
+    @Res({ passthrough: true }) res: express.Response,
     @Query('status') status?: string,
     @Query('department') department?: string,
     @Query('search') search?: string,
   ) {
+    res.setHeader('X-CIAM-Framework-Version', CIAM_FRAMEWORK_VERSION);
     return await this.directoryService.listAccounts({ status, department, search });
   }
 

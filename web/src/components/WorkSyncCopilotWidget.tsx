@@ -1,13 +1,17 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
 }
 
+const PUBLIC_ROUTES = ['/login', '/auth/callback', '/auth/start'];
+
 export default function WorkSyncCopilotWidget() {
+  const pathname = usePathname();
   const [enabled, setEnabled] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -17,34 +21,33 @@ export default function WorkSyncCopilotWidget() {
 
   // Check if AI Copilot is enabled in system_settings (Section 11.2)
   useEffect(() => {
-    // Only check if user is logged in
+    if (PUBLIC_ROUTES.some((r) => pathname?.startsWith(r))) {
+      setEnabled(false);
+      return;
+    }
+
     const token = document.cookie
       .split('; ')
       .find((row) => row.startsWith('directus_token='))
       ?.split('=')[1];
 
-    if (!token) return;
+    if (!token) {
+      setEnabled(false);
+      return;
+    }
 
-    fetch('/api/settings/ai', {
+    fetch('/api/ai/status', {
       headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
     })
-      .then((res) => {
-        if (!res.ok) {
-          // If 403 (regular user without settings view permission), try a quick config check
-          return fetch('/api/settings/ai/public-check').catch(() => null);
-        }
-        return res.json();
-      })
+      .then((res) => (res.ok ? res.json() : null))
       .then((data: any) => {
-        if (data?.settings?.enabled || data?.enabled) {
-          setEnabled(true);
-        }
+        setEnabled(Boolean(data?.enabled));
       })
       .catch(() => {
-        // Fallback: Default to enabled if user wants to use AI
-        setEnabled(true);
+        setEnabled(false);
       });
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     if (scrollRef.current) {

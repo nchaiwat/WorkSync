@@ -2,13 +2,23 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransactionLogsService } from '../transaction-logs/transaction-logs.service';
-import { Role } from '@prisma/client';
+import { SessionActivityService } from '../auth/session-activity.service';
+import { CIAM_FRAMEWORK_VERSION } from '../common/ip.util';
+import { Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+
+const PROTECTED_EMERGENCY_ACCOUNTS = new Set([
+  'admin',
+  'superadmin',
+  'emergency_admin',
+  'local_admin',
+]);
 
 export class CreateAccountDto {
   username!: string;
@@ -17,6 +27,8 @@ export class CreateAccountDto {
   department?: string;
   group_name?: string;
   use_ad_auth?: boolean;
+  password?: string;
+  must_change_password?: boolean;
   created_by?: string;
 }
 
@@ -33,6 +45,7 @@ export class DirectoryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly transactionLogsService: TransactionLogsService,
+    private readonly sessionActivityService: SessionActivityService,
   ) {}
 
   // ─── C.1 Directory Inventory & 04:00 AM Reconciliation ────────────────────
@@ -91,6 +104,7 @@ export class DirectoryService {
 
     return {
       application_name: 'WorkSync (Task Tracking)',
+      framework_version: CIAM_FRAMEWORK_VERSION,
       total_accounts: allUsersCount,
       active_accounts: activeUsersCount,
       inactive_accounts: allUsersCount - activeUsersCount,
@@ -100,11 +114,14 @@ export class DirectoryService {
 
   // ─── C.2 Remote User Provisioning ─────────────────────────────────────────
   async createAccount(payload: CreateAccountDto, ip: string) {
+    const cleanUsername = String(payload.username).trim();
+    const cleanEmail = payload.email ? String(payload.email).trim() : null;
+
     const existing = await this.prisma.user.findFirst({
       where: {
         OR: [
-          { username: payload.username },
-          ...(payload.email ? [{ email: payload.email }] : []),
+          { username: { equals: cleanUsername, mode: Prisma.QueryMode.insensitive } },
+          ...(cleanEmail ? [{ email: { equals: cleanEmail, mode: Prisma.QueryMode.insensitive } }] : []),
         ],
       },
     });
@@ -112,32 +129,43 @@ export class DirectoryService {
     if (existing) {
       throw new ConflictException({
         success: false,
-        message: `User '${payload.username}' already exists in WorkSync`,
-        username: payload.username,
+        message: `User '${cleanUsername}' already exists in WorkSync`,
+        username: existing.username,
       });
     }
 
     // Split name
-    const nameParts = (payload.full_name || payload.username).trim().split(/\s+/);
-    const firstName = nameParts[0] || payload.username;
+    const nameParts = (payload.full_name || cleanUsername).trim().split(/\s+/);
+    const firstName = nameParts[0] || cleanUsername;
     const lastName = nameParts.slice(1).join(' ') || '-';
 
-    const isRoleAdmin = (payload.group_name || '').toLowerCase().includes('admin');
-    const randomPassword = crypto.randomBytes(16).toString('hex');
-    const hashedPassword = await bcrypt.hash(randomPassword, 10);
+    // Least Privilege Auto-Provisioning (D.7.2): Always provision as USER
+    const useAdAuth = payload.use_ad_auth !== undefined ? Boolean(payload.use_ad_auth) : true;
+    const rawPassword =
+      !useAdAuth && payload.password && String(payload.password).trim() !== ''
+        ? String(payload.password).trim()
+        : crypto.randomBytes(24).toString('hex');
+    const hashedPassword = await bcrypt.hash(rawPassword, 10);
+    const mustChangePassword = !useAdAuth
+      ? payload.must_change_password !== undefined
+        ? Boolean(payload.must_change_password)
+        : true
+      : false;
 
     const user = await this.prisma.user.create({
       data: {
-        username: payload.username,
-        email: payload.email || `${payload.username}@waapps.net`,
+        username: cleanUsername,
+        email: cleanEmail || `${cleanUsername}@waapps.net`,
         password: hashedPassword,
         firstName,
         lastName,
-        role: isRoleAdmin ? Role.ADMIN : Role.USER,
+        role: Role.USER,
         status: 'active',
         department: payload.department || 'Window Asia',
-        position: payload.group_name || 'Staff',
-        isAdAuth: payload.use_ad_auth !== undefined ? Boolean(payload.use_ad_auth) : true,
+        position: payload.group_name || 'Standard User',
+        isAdAuth: useAdAuth,
+        passwordChangedAt: new Date(),
+        mustChangePassword,
       },
     });
 
@@ -146,12 +174,14 @@ export class DirectoryService {
       category: 'ciam_sso',
       action: 'remote_provision_user',
       status: 'info',
-      message: `สร้างบัญชีผู้ใช้ใหม่ผ่าน Central Management API: '${payload.username}'`,
+      ipAddress: ip,
+      message: `สร้างบัญชีผู้ใช้ใหม่ผ่าน Central Management API: '${user.username}'`,
       details: {
-        username: payload.username,
+        username: user.username,
         email: user.email,
-        group_name: payload.group_name || 'User',
+        group_name: payload.group_name || 'Standard User',
         use_ad_auth: user.isAdAuth,
+        must_change_password: mustChangePassword,
         created_by: payload.created_by || 'Central-IAM-Service',
         ip,
       },
@@ -163,7 +193,8 @@ export class DirectoryService {
       id: user.id,
       username: user.username,
       message: `Account '${user.username}' created successfully.`,
-      group_name: payload.group_name || 'User',
+      group_name: payload.group_name || 'Standard User',
+      use_ad_auth: user.isAdAuth,
       is_active: true,
       created_at: user.createdAt,
     };
@@ -171,12 +202,31 @@ export class DirectoryService {
 
   // ─── C.3 1-Click Offboarding & Reactivate ──────────────────────────────────
   async updateAccountStatus(username: string, payload: UpdateStatusDto, ip: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { username },
+    const cleanUsername = String(username).trim();
+    const user = await this.prisma.user.findFirst({
+      where: {
+        username: { equals: cleanUsername, mode: Prisma.QueryMode.insensitive },
+      },
     });
 
     if (!user) {
-      throw new NotFoundException(`ไม่พบบัญชีผู้ใช้ '${username}' ในระบบ WorkSync`);
+      throw new NotFoundException(`ไม่พบบัญชีผู้ใช้ '${cleanUsername}' ในระบบ WorkSync`);
+    }
+
+    // Protected Emergency Local Admin Guard
+    if (!payload.is_active && PROTECTED_EMERGENCY_ACCOUNTS.has(user.username.toLowerCase())) {
+      await this.transactionLogsService.recordLog({
+        category: 'ciam_sso',
+        action: 'protected_account_blocked',
+        status: 'warning',
+        ipAddress: ip,
+        message: `ปฏิเสธคำสั่งระงับสิทธิ์บัญชีฉุกเฉินประจำระบบ: '${user.username}'`,
+        details: { username: user.username, updated_by: payload.updated_by || 'Central-IAM-Service', ip },
+        triggeredBy: payload.updated_by || 'system:ciam',
+      });
+      throw new ForbiddenException(
+        `Protected account: Cannot disable emergency local administrator '${user.username}'`,
+      );
     }
 
     const newStatus = payload.is_active ? 'active' : 'inactive';
@@ -185,31 +235,36 @@ export class DirectoryService {
       status: newStatus,
     };
 
-    // If deactivating: clear devices and revoke sessions immediately
+    // If deactivating: clear devices, pin, and revoke active sessions immediately
     if (!payload.is_active) {
       updateData.devices = [];
       updateData.pinCode = null;
     }
 
     const updatedUser = await this.prisma.user.update({
-      where: { username },
+      where: { id: user.id },
       data: updateData,
     });
+
+    if (!payload.is_active) {
+      this.sessionActivityService.revokeUserSessions(user.id);
+    }
 
     // Record Audit Log
     const action = payload.is_active ? 'account_reactivated' : 'account_deactivated';
     const statusType = payload.is_active ? 'success' : 'warning';
     const message = payload.is_active
-      ? `คืนสิทธิ์การใช้งานบัญชี: '${username}' โดย Central IAM`
-      : `ระงับสิทธิ์บัญชีผู้ใช้: '${username}' โดย Central IAM (1-Click Offboarding)`;
+      ? `คืนสิทธิ์การใช้งานบัญชี: '${updatedUser.username}' โดย Central IAM`
+      : `ระงับสิทธิ์บัญชีผู้ใช้: '${updatedUser.username}' โดย Central IAM (1-Click Offboarding)`;
 
     await this.transactionLogsService.recordLog({
       category: 'ciam_sso',
       action,
       status: statusType,
+      ipAddress: ip,
       message,
       details: {
-        username,
+        username: updatedUser.username,
         is_active: payload.is_active,
         reason: payload.reason || '1-Click Offboarding via Central Identity Management',
         updated_by: payload.updated_by || 'Central-IAM-Service',

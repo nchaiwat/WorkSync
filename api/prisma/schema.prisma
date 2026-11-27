@@ -186,6 +186,7 @@ model TransactionLog {
   category     String   @db.VarChar(50)
   action       String   @db.VarChar(100)
   status       String   @default("success") @db.VarChar(20)
+  ipAddress    String   @default("127.0.0.1 (SYSTEM)") @map("ip_address") @db.VarChar(50)
   message      String   @db.VarChar(500)
   details      String?  @db.Text
   recordsCount Int      @default(0) @map("records_count")
@@ -194,6 +195,7 @@ model TransactionLog {
   createdAt    DateTime @default(now()) @map("created_at")
 
   @@index([category])
+  @@index([ipAddress], map: "idx_trans_logs_ip")
   @@index([createdAt(sort: Desc)])
   @@map("transaction_logs")
 }

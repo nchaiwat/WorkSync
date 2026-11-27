@@ -1,8 +1,9 @@
 import type { Task, TaskComment, TaskFormData, User } from '@/types';
+import { logout, logoutIdleTimeout } from './auth';
 
 const getApiBase = () => {
   if (typeof window === 'undefined') {
-    return process.env.NEXT_PUBLIC_API_URL || 'http://api:4000';
+    return process.env.NEXT_PUBLIC_API_URL || 'http://worksync-api:4000';
   }
   return '';
 };
@@ -37,6 +38,16 @@ async function fetchJSON<T>(url: string, options: RequestInit = {}): Promise<T> 
   });
 
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== 'undefined') {
+      const p = window.location.pathname;
+      if (p !== '/login' && p !== '/auth/callback' && p !== '/auth/start') {
+        if (res.headers.get('x-session-expired') === 'idle_timeout') {
+          logoutIdleTimeout(p);
+        } else {
+          logout();
+        }
+      }
+    }
     const errorText = await res.text();
     throw new Error(`API Error ${res.status}: ${errorText}`);
   }

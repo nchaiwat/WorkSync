@@ -15,6 +15,7 @@ import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramService } from '../telegram/telegram.service';
+import { normalizeIp } from '../common/ip.util';
 import { Prisma, Role } from '@prisma/client';
 
 export interface AuthorizeUrlResponse {
@@ -145,28 +146,44 @@ export class CiamSsoService {
       throw new Error('TokenExpired: ID Token has expired');
     }
 
-    // Clean issuer comparison
-    const expectedIss = baseUrl.replace(/\/+$/, '');
-    const actualIss = (payload.iss || '').replace(/\/+$/, '');
-    if (actualIss && actualIss !== expectedIss) {
-      this.logger.warn(`Issuer mismatch. Expected: ${expectedIss}, got: ${actualIss}`);
+    // Strict issuer comparison (Section B.3)
+    if (payload.iss) {
+      const expectedIss = baseUrl.replace(/\/+$/, '');
+      const actualIss = String(payload.iss).replace(/\/+$/, '');
+      if (actualIss !== expectedIss) {
+        throw new Error(`IssuerMismatch: Expected ${expectedIss}, got ${actualIss}`);
+      }
     }
 
-    // Clean audience comparison
-    const audArray = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-    if (payload.aud && !audArray.includes(clientId)) {
-      this.logger.warn(`Audience mismatch. Expected: ${clientId}, got: ${payload.aud}`);
+    // Strict audience comparison (Section B.3)
+    if (payload.aud) {
+      const audArray = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+      if (!audArray.includes(clientId)) {
+        throw new Error(`AudienceMismatch: Expected ${clientId}, got ${payload.aud}`);
+      }
     }
 
     return payload;
   }
 
   // ─── SSO Callback & Token Exchange ──────────────────────────────────────
-  async handleCallback(code: string, codeVerifier: string, redirectUri: string, ip: string) {
+  async handleCallback(code: string, codeVerifier: string, redirectUri: string, ip: string, state?: string) {
     try {
-      const ssoEnabled = await this.settingsService.getBoolean('ciam_sso_enabled', true);
-      if (!ssoEnabled) {
-        throw new ServiceUnavailableException('Central IAM SSO ปิดใช้งานในระบบ WorkSync');
+      const [ssoEnabled, breakGlass] = await Promise.all([
+        this.settingsService.getBoolean('ciam_sso_enabled', true),
+        this.settingsService.getBoolean('ciam_break_glass_active', false),
+      ]);
+      if (!ssoEnabled || breakGlass) {
+        await this.transactionLogsService.recordLog({
+          category: 'ciam_sso',
+          action: 'login_failed',
+          status: 'warning',
+          ipAddress: ip,
+          message: 'ปฏิเสธการเข้าสู่ระบบ SSO: ระบบปิดใช้งาน SSO หรืออยู่ในโหมดฉุกเฉิน Break-Glass',
+          details: { error: 'SsoDisabledOrBreakGlass', ip, state },
+          triggeredBy: 'system:ciam',
+        });
+        throw new ServiceUnavailableException('ระบบ Central IAM SSO ปิดใช้งานชั่วคราว หรืออยู่ในโหมดฉุกเฉิน Break-Glass');
       }
 
       const baseUrl = (await this.settingsService.get('ciam_base_url', 'https://ciam.windowasia.com')).replace(/\/+$/, '');
@@ -187,6 +204,7 @@ export class CiamSsoService {
       }
 
       let tokenResponse: any;
+      let responseOriginIp: string | null = null;
       try {
         const res = await fetch(tokenUrl, {
           method: 'POST',
@@ -195,6 +213,7 @@ export class CiamSsoService {
           signal: AbortSignal.timeout(8000),
         });
 
+        responseOriginIp = res.headers.get('x-ciam-origin-ip');
         const resText = await res.text();
         if (!res.ok) {
           let errMsg = `CIAM Token Exchange failed with status ${res.status}`;
@@ -210,8 +229,9 @@ export class CiamSsoService {
           category: 'ciam_sso',
           action: 'login_failed',
           status: 'failed',
+          ipAddress: ip,
           message: `การยืนยันตัวตน SSO ล้มเหลว: ${err.message}`,
-          details: { error: 'TokenExchangeFailed', ip, detail: err.message },
+          details: { error: 'TokenExchangeFailed', ip, browser_ip: ip, detail: err.message },
           triggeredBy: 'system:ciam',
         });
         throw new UnauthorizedException(`ไม่สามารถแลกเปลี่ยน Token กับ Central IAM ได้: ${err.message}`);
@@ -231,13 +251,15 @@ export class CiamSsoService {
           category: 'ciam_sso',
           action: 'login_failed',
           status: 'failed',
+          ipAddress: ip,
           message: `การยืนยันตัวตน SSO ล้มเหลว: ลายเซ็นไม่ถูกต้องหรือ Token หมดอายุ`,
-          details: { error: 'SignatureVerificationFailed', ip, detail: err.message },
+          details: { error: 'SignatureVerificationFailed', ip, browser_ip: ip, detail: err.message },
           triggeredBy: 'system:ciam',
         });
         throw new UnauthorizedException(`การตรวจสอบ ID Token ล้มเหลว: ${err.message}`);
       }
 
+      const ciamOriginIp = normalizeIp(claims.ciam_origin_ip || responseOriginIp || ip);
       const username = claims.preferred_username || claims.username || claims.sub;
       const email = claims.email || null;
       const fullName = claims.name || claims.full_name || username;
@@ -259,22 +281,22 @@ export class CiamSsoService {
       });
 
       if (user) {
-        // Check status
+        // Check status (SSO Callback Inactive Guard - never auto-reactivate)
         if (user.status !== 'active') {
           await this.transactionLogsService.recordLog({
             category: 'ciam_sso',
             action: 'account_deactivated',
             status: 'warning',
+            ipAddress: ip,
             message: `ปฏิเสธการเข้าสู่ระบบ: บัญชีพนักงาน '${cleanUsername}' ถูกระงับสิทธิ์ในระบบนี้`,
-            details: { username: cleanUsername, ip, reason: `status is ${user.status}` },
+            details: { username: cleanUsername, ip, browser_ip: ip, reason: `status is ${user.status}` },
             triggeredBy: `user:${cleanUsername}`,
           });
           throw new UnauthorizedException(`บัญชีผู้ใช้ '${cleanUsername}' ถูกระงับสิทธิ์ในระบบ WorkSync`);
         }
       } else {
-        // Auto-provisioning
+        // Least Privilege Auto-provisioning (D.7.2)
         const defaultGroup = await this.settingsService.get('ciam_auto_provision_group', 'User');
-        const isRoleAdmin = defaultGroup.toLowerCase().includes('admin');
         const nameParts = fullName.trim().split(/\s+/);
         const firstName = nameParts[0] || cleanUsername;
         const lastName = nameParts.slice(1).join(' ') || '-';
@@ -289,11 +311,11 @@ export class CiamSsoService {
               password: hashedPassword,
               firstName,
               lastName,
-              role: isRoleAdmin ? Role.ADMIN : Role.USER,
+              role: Role.USER,
               status: 'active',
               isAdAuth: true,
               department: claims.department || 'Window Asia',
-              position: claims.position || 'Staff',
+              position: claims.position || defaultGroup || 'Staff',
               passwordChangedAt: new Date(),
               mustChangePassword: false,
             },
@@ -303,8 +325,16 @@ export class CiamSsoService {
             category: 'ciam_sso',
             action: 'auto_provision_user',
             status: 'info',
+            ipAddress: ciamOriginIp,
             message: `สร้างบัญชีผู้ใช้ใหม่อัตโนมัติจาก Central IAM: '${cleanUsername}'`,
-            details: { username: cleanUsername, email, group_assigned: defaultGroup, claims },
+            details: {
+              username: cleanUsername,
+              email,
+              group_assigned: defaultGroup,
+              browser_ip: ip,
+              client_ip: ip,
+              claims,
+            },
             triggeredBy: 'system:ciam',
           });
         } catch (createErr: any) {
@@ -331,10 +361,13 @@ export class CiamSsoService {
         category: 'ciam_sso',
         action: 'login_success',
         status: 'success',
+        ipAddress: ciamOriginIp,
         message: `เข้าสู่ระบบผ่าน Central IAM SSO สำเร็จ: ผู้ใช้ '${cleanUsername}'`,
         details: {
           username: cleanUsername,
-          ip,
+          ip: ciamOriginIp,
+          browser_ip: ip,
+          client_ip: ip,
           ciam_issuer: baseUrl,
           auth_method: 'OIDC_PKCE_S256',
           role: user.role,
@@ -372,6 +405,7 @@ export class CiamSsoService {
       category: 'security_break_glass',
       action: 'toggle_break_glass',
       status: active ? 'warning' : 'success',
+      ipAddress: ip,
       message: `สลับสถานะระบบ Break-Glass: ${active ? 'ENABLED' : 'DISABLED'} โดย '${adminUsername}'`,
       details: {
         break_glass_active: active,

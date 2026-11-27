@@ -1,10 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizeIp } from '../common/ip.util';
 
 export interface RecordLogDto {
   category: string;
   action: string;
   status?: 'success' | 'failed' | 'warning' | 'info';
+  ipAddress?: string;
   message: string;
   details?: any;
   recordsCount?: number;
@@ -24,11 +26,17 @@ export class TransactionLogsService {
         ? JSON.stringify(data.details)
         : (data.details ? String(data.details) : null);
 
+      const rawIp =
+        data.ipAddress ||
+        (typeof data.details === 'object' && data.details?.ip ? String(data.details.ip) : undefined);
+      const ipAddress = normalizeIp(rawIp);
+
       return await this.prisma.transactionLog.create({
         data: {
           category: data.category,
           action: data.action,
           status: data.status || 'success',
+          ipAddress,
           message: data.message,
           details: detailsStr,
           recordsCount: data.recordsCount ?? 0,

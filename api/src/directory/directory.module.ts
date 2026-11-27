@@ -5,9 +5,10 @@ import { CiamM2mGuard } from './ciam-m2m.guard';
 import { PrismaModule } from '../prisma/prisma.module';
 import { SettingsModule } from '../settings/settings.module';
 import { TransactionLogsModule } from '../transaction-logs/transaction-logs.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [PrismaModule, SettingsModule, TransactionLogsModule],
+  imports: [PrismaModule, SettingsModule, TransactionLogsModule, AuthModule],
   controllers: [DirectoryController],
   providers: [DirectoryService, CiamM2mGuard],
   exports: [DirectoryService],

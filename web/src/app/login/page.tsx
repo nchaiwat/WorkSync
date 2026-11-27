@@ -39,6 +39,10 @@ export default function LoginPage() {
   const [isPasswordExpired, setIsPasswordExpired] = useState(false);
   const [tempToken, setTempToken] = useState('');
 
+  // ─── Idle Timeout / Redirect Params (Section 14.3) ──────────────────────
+  const [logoutReason, setLogoutReason] = useState<string | null>(null);
+  const [redirectUri, setRedirectUri] = useState<string>('/');
+
   // ─── SSO State ──────────────────────────────────────────────────────────
   const [ssoConfig, setSsoConfig] = useState<{
     sso_enabled: boolean;
@@ -52,6 +56,21 @@ export default function LoginPage() {
     setRenderTs(Date.now());
 
     if (typeof window !== 'undefined') {
+      const search = new URLSearchParams(window.location.search);
+      const reasonParam = search.get('reason');
+      if (reasonParam) {
+        setLogoutReason(reasonParam);
+      }
+      const rawRedirect = search.get('redirect_uri');
+      if (
+        rawRedirect &&
+        rawRedirect.startsWith('/') &&
+        !rawRedirect.startsWith('//') &&
+        !rawRedirect.startsWith('/login')
+      ) {
+        setRedirectUri(rawRedirect);
+      }
+
       const savedType = localStorage.getItem('worksync_login_type') as 'local' | 'ad';
       if (savedType === 'ad' || savedType === 'local') {
         setLoginType(savedType);
@@ -126,7 +145,7 @@ export default function LoginPage() {
       } catch {
         /* ignore */
       }
-      router.push('/');
+      router.push(redirectUri);
     } catch (err: any) {
       setError(err.message || 'เข้าสู่ระบบด้วย PIN ไม่สำเร็จ');
       setPin('');
@@ -170,7 +189,7 @@ export default function LoginPage() {
       } catch {
         /* ignore */
       }
-      router.push('/');
+      router.push(redirectUri);
     } catch (err: any) {
       setError(err.message || 'เข้าสู่ระบบไม่สำเร็จ');
     } finally {
@@ -196,7 +215,7 @@ export default function LoginPage() {
           token={tempToken}
           onSuccess={() => {
             setShowForcedChangeModal(false);
-            router.push('/');
+            router.push(redirectUri);
           }}
         />
       )}
@@ -215,6 +234,16 @@ export default function LoginPage() {
               {isPinMode ? 'เข้าใช้งานด้วย PIN Code' : 'ระบบติดตามงาน — บริษัท วินโดว์ เอเชีย จำกัด (มหาชน)'}
             </p>
           </div>
+
+          {/* Idle Timeout Alert Banner (Section 14.3) */}
+          {logoutReason === 'idle_timeout' && (
+            <div className="mb-5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-xl p-3.5 flex items-start gap-3 text-amber-800 dark:text-amber-300">
+              <span className="text-lg">⏱️</span>
+              <div className="text-xs leading-relaxed">
+                เซสชันของคุณหมดอายุเนื่องจากไม่มีการใช้งานระบบเกินระยะเวลาที่กำหนด (Idle Timeout) กรุณาเข้าสู่ระบบใหม่อีกครั้ง
+              </div>
+            </div>
+          )}
 
           {/* สถานการณ์ที่ 3: Break-Glass Alert Banner */}
           {isBreakGlass && (

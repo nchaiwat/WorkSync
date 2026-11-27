@@ -68,32 +68,32 @@ export class AiService {
     const changedFields: string[] = [];
 
     if (data.enabled !== undefined) {
-      await this.settingsService.set('ai_copilot_enabled', String(Boolean(data.enabled)), 'central_iam', 'boolean');
+      await this.settingsService.set('ai_copilot_enabled', String(Boolean(data.enabled)), 'ai_copilot', 'boolean');
       changedFields.push('ai_copilot_enabled');
     }
     if (data.provider !== undefined) {
-      await this.settingsService.set('ai_provider', String(data.provider), 'central_iam', 'string');
+      await this.settingsService.set('ai_provider', String(data.provider), 'ai_copilot', 'string');
       changedFields.push('ai_provider');
     }
     if (data.model !== undefined) {
-      await this.settingsService.set('ai_model', String(data.model), 'central_iam', 'string');
+      await this.settingsService.set('ai_model', String(data.model), 'ai_copilot', 'string');
       changedFields.push('ai_model');
     }
     if (data.base_url !== undefined) {
-      await this.settingsService.set('ai_base_url', String(data.base_url || ''), 'central_iam', 'string');
+      await this.settingsService.set('ai_base_url', String(data.base_url || ''), 'ai_copilot', 'string');
       changedFields.push('ai_base_url');
     }
     if (data.system_prompt !== undefined) {
-      await this.settingsService.set('ai_system_prompt', String(data.system_prompt), 'central_iam', 'string');
+      await this.settingsService.set('ai_system_prompt', String(data.system_prompt), 'ai_copilot', 'string');
       changedFields.push('ai_system_prompt');
     }
     if (data.allow_mcp_tools !== undefined) {
-      await this.settingsService.set('ai_allow_mcp_tools', String(Boolean(data.allow_mcp_tools)), 'central_iam', 'boolean');
+      await this.settingsService.set('ai_allow_mcp_tools', String(Boolean(data.allow_mcp_tools)), 'ai_copilot', 'boolean');
       changedFields.push('ai_allow_mcp_tools');
     }
     // Only update API key if provided and not masked
     if (data.api_key !== undefined && data.api_key.trim() !== '' && !data.api_key.includes('...')) {
-      await this.settingsService.set('ai_api_key', data.api_key.trim(), 'central_iam', 'encrypted');
+      await this.settingsService.set('ai_api_key', data.api_key.trim(), 'ai_copilot', 'encrypted');
       changedFields.push('ai_api_key');
     }
 
@@ -101,6 +101,7 @@ export class AiService {
       category: 'system_setting',
       action: 'update_ai_settings',
       status: 'success',
+      ipAddress: ip,
       message: `แก้ไขการตั้งค่า AI Copilot โดย '${adminUsername}'`,
       details: { changedFields, ip },
       triggeredBy: `user:${adminUsername}`,
@@ -113,50 +114,153 @@ export class AiService {
     };
   }
 
+  private async invokeProvider(
+    provider: string,
+    model: string,
+    apiKey: string,
+    baseUrl: string,
+    systemPrompt: string,
+    userPrompt: string,
+    timeoutMs = 15000,
+  ): Promise<string> {
+    const cleanBase = (baseUrl || '').trim().replace(/\/+$/, '');
+    const cleanKey = (apiKey || '').trim();
+
+    if (provider === 'google') {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...ZERO_TRAINING_PRIVACY_HEADERS },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Google AI API Error (${res.status}): ${errText}`);
+      }
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error('Empty response from Google Gemini API');
+      return text;
+    }
+
+    if (provider === 'anthropic') {
+      const url = `${cleanBase || 'https://api.anthropic.com'}/v1/messages`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': cleanKey,
+          'anthropic-version': '2023-06-01',
+          ...ZERO_TRAINING_PRIVACY_HEADERS,
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 1024,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userPrompt }],
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Anthropic API Error (${res.status}): ${errText}`);
+      }
+      const data = await res.json();
+      const text = data.content?.[0]?.text;
+      if (!text) throw new Error('Empty response from Anthropic API');
+      return text;
+    }
+
+    if (provider === 'ollama') {
+      const url = `${cleanBase || 'http://localhost:11434'}/api/chat`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(cleanKey ? { Authorization: `Bearer ${cleanKey}` } : {}),
+          ...ZERO_TRAINING_PRIVACY_HEADERS,
+        },
+        body: JSON.stringify({
+          model,
+          stream: false,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Ollama API Error (${res.status}): ${errText}`);
+      }
+      const data = await res.json();
+      const text = data.message?.content;
+      if (!text) throw new Error('Empty response from Ollama');
+      return text;
+    }
+
+    // openai or custom OpenAI-compatible proxy
+    const base = cleanBase || 'https://api.openai.com/v1';
+    const url = base.endsWith('/chat/completions') ? base : `${base}/chat/completions`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(cleanKey ? { Authorization: `Bearer ${cleanKey}` } : {}),
+        ...ZERO_TRAINING_PRIVACY_HEADERS,
+      },
+      body: JSON.stringify({
+        model,
+        store: false,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`${provider.toUpperCase()} API Error (${res.status}): ${errText}`);
+    }
+    const data = await res.json();
+    const text = data.choices?.[0]?.message?.content;
+    if (!text) throw new Error(`Empty response from ${provider}`);
+    return text;
+  }
+
   async testAiConnection() {
     const rawKey = await this.settingsService.get('ai_api_key', '');
     const provider = await this.settingsService.get('ai_provider', 'google');
     const model = await this.settingsService.get('ai_model', 'gemini-2.5-flash');
+    const baseUrl = await this.settingsService.get('ai_base_url', '');
 
-    if (!rawKey || rawKey.trim() === '') {
+    if (provider !== 'ollama' && (!rawKey || rawKey.trim() === '')) {
       throw new BadRequestException('ยังไม่ได้ระบุ AI API Key กรุณาระบุก่อนทดสอบเชื่อมต่อ');
     }
 
     const start = Date.now();
     try {
-      if (provider === 'google') {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${rawKey.trim()}`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...ZERO_TRAINING_PRIVACY_HEADERS },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: 'Ping test. Reply with pong.' }] }],
-          }),
-          signal: AbortSignal.timeout(10000),
-        });
-
-        const latency = Date.now() - start;
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`Google AI API Error (${res.status}): ${errText}`);
-        }
-        return {
-          status: 'connected',
-          latency_ms: latency,
-          provider: 'google',
-          model,
-          message: 'เชื่อมต่อไปยัง Google Gemini API สำเร็จสมบูรณ์',
-        };
-      } else {
-        // Fallback or OpenAI test
-        return {
-          status: 'connected',
-          latency_ms: Date.now() - start,
-          provider,
-          model,
-          message: `ทดสอบเชื่อมต่อ ${provider} สำเร็จ`,
-        };
-      }
+      await this.invokeProvider(
+        provider,
+        model,
+        rawKey,
+        baseUrl,
+        'You are a connectivity probe.',
+        'Ping test. Reply with pong.',
+        10000,
+      );
+      return {
+        status: 'connected',
+        latency_ms: Date.now() - start,
+        provider,
+        model,
+        message: `เชื่อมต่อไปยัง ${provider.toUpperCase()} (${model}) สำเร็จสมบูรณ์`,
+      };
     } catch (err: any) {
       return {
         status: 'error',
@@ -185,15 +289,6 @@ export class AiService {
     const cleanUserQuery = sanitizeContextForPrivacy(lastUserMessage);
 
     // ─── Guard: Strict Read-Only & Zero-Mutation Policy ───────────────────
-    const mutationKeywords = [
-      'ลบ', 'delete', 'remove', 'drop', 'แก้ไข', 'update', 'modify',
-      'สร้าง', 'create', 'insert', 'add', 'ปิดบัญชี', 'disable', 'offboard', 'offboarding',
-    ];
-    const isMutationIntent = mutationKeywords.some((w) =>
-      cleanUserQuery.toLowerCase().includes(w),
-    );
-
-    // If query asks to mutate or delete directly
     if (
       cleanUserQuery.includes('ลบงาน') ||
       cleanUserQuery.includes('แก้ไขงาน') ||
@@ -215,7 +310,6 @@ export class AiService {
     const isUserAdmin = currentUser.role === Role.ADMIN || currentUser.role === 'ADMIN';
     const whereClause: any = { isArchived: false };
 
-    // If not admin, restrict to tasks assigned to user, managed by user, or collaborated
     if (!isUserAdmin) {
       whereClause.OR = [
         { assignee: currentUser.username },
@@ -224,7 +318,7 @@ export class AiService {
       ];
     }
 
-    const [tasks, allUsers, totalCount] = await Promise.all([
+    const [tasks, , totalCount] = await Promise.all([
       this.prisma.task.findMany({
         where: whereClause,
         orderBy: { updatedAt: 'desc' },
@@ -260,7 +354,7 @@ export class AiService {
     const reviewTasks = tasks.filter((t) => t.status === 'review');
     const doneTasks = tasks.filter((t) => t.status === 'done');
 
-    const summaryContext = `
+    const summaryContext = sanitizeContextForPrivacy(`
 [บริบทข้อมูลระบบ WorkSync แบบ Read-Only]:
 - ผู้ใช้งานที่กำลังสอบถาม: ${currentUser.username} (${currentUser.firstName || ''} ${currentUser.lastName || ''}) แผนก: ${currentUser.department || 'ไม่ระบุ'} สิทธิ์: ${currentUser.role}
 - จำนวนงานที่ตรวจพบทั้งหมด: ${totalCount} งาน
@@ -276,53 +370,39 @@ ${tasks
       }`,
   )
   .join('\n')}
-`;
+`);
 
-    // ─── Call External AI API (Google Gemini) with Zero-Training Headers ───
-    const rawKey = await this.settingsService.get('ai_api_key', '');
-    const model = await this.settingsService.get('ai_model', 'gemini-2.5-flash');
-    const systemPrompt = await this.settingsService.get(
-      'ai_system_prompt',
-      'คุณคือ WorkSync Copilot ผู้ช่วย AI อัจฉริยะประจำระบบติดตามงาน WorkSync ตอบคำถามภาษาไทยอย่างสุภาพ ถูกต้อง กระชับ',
-    );
+    // ─── Call External AI API with Zero-Training Headers ──────────────────
+    const [rawKey, provider, model, baseUrl, systemPrompt] = await Promise.all([
+      this.settingsService.get('ai_api_key', ''),
+      this.settingsService.get('ai_provider', 'google'),
+      this.settingsService.get('ai_model', 'gemini-2.5-flash'),
+      this.settingsService.get('ai_base_url', ''),
+      this.settingsService.get(
+        'ai_system_prompt',
+        'คุณคือ WorkSync Copilot ผู้ช่วย AI อัจฉริยะประจำระบบติดตามงาน WorkSync ตอบคำถามภาษาไทยอย่างสุภาพ ถูกต้อง กระชับ',
+      ),
+    ]);
 
-    if (rawKey && rawKey.trim() !== '') {
+    if (provider === 'ollama' || (rawKey && rawKey.trim() !== '')) {
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${rawKey.trim()}`;
-        const payload = {
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                {
-                  text: `${systemPrompt}\n\n${summaryContext}\n\nคำถามจากผู้ใช้: ${cleanUserQuery}`,
-                },
-              ],
-            },
-          ],
+        const answerText = await this.invokeProvider(
+          provider,
+          model,
+          rawKey,
+          baseUrl,
+          systemPrompt,
+          `${summaryContext}\n\nคำถามจากผู้ใช้: ${cleanUserQuery}`,
+          15000,
+        );
+        return {
+          message: {
+            role: 'assistant',
+            content: answerText,
+          },
         };
-
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...ZERO_TRAINING_PRIVACY_HEADERS },
-          body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(15000),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          const answerText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (answerText) {
-            return {
-              message: {
-                role: 'assistant',
-                content: answerText,
-              },
-            };
-          }
-        }
       } catch (err: any) {
-        this.logger.warn(`External AI call failed, falling back to local analysis: ${err.message}`);
+        this.logger.warn(`External AI call (${provider}) failed, falling back to local analysis: ${err.message}`);
       }
     }
 

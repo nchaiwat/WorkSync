@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ssoCallback } from '@/lib/auth';
 import Link from 'next/link';
@@ -10,8 +10,12 @@ function CallbackContent() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<'loading' | 'error' | 'success'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
+  const executedRef = useRef(false);
 
   useEffect(() => {
+    if (executedRef.current) return;
+    executedRef.current = true;
+
     const handleExchange = async () => {
       const code = searchParams.get('code');
       const state = searchParams.get('state');
@@ -39,7 +43,7 @@ function CallbackContent() {
       const redirectUri = window.location.origin + '/auth/callback';
 
       try {
-        const result = await ssoCallback(code, codeVerifier, redirectUri);
+        const result = await ssoCallback(code, codeVerifier, redirectUri, state || undefined);
 
         // Save Auth Cookies
         document.cookie = `directus_token=${result.access_token}; path=/; max-age=900000; SameSite=Lax`;

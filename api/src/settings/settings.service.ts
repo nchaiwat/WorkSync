@@ -12,6 +12,8 @@ export interface CiamConfigResponse {
   ciam_ad_gateway_url: string;
   ciam_auto_provision_group: string;
   ciam_session_ttl_minutes: number;
+  ciam_idle_timeout_minutes: number;
+  ciam_idle_warning_seconds: number;
   updated_at?: Date | null;
 }
 
@@ -25,6 +27,8 @@ export class UpdateCiamDto {
   ciam_ad_gateway_url?: string;
   ciam_auto_provision_group?: string;
   ciam_session_ttl_minutes?: number;
+  ciam_idle_timeout_minutes?: number;
+  ciam_idle_warning_seconds?: number;
 }
 
 export interface SmtpConfigResponse {
@@ -141,6 +145,8 @@ export class SettingsService implements OnModuleInit {
     const adGateway = await this.get('ciam_ad_gateway_url', 'http://192.168.12.11:3100');
     const autoGroup = await this.get('ciam_auto_provision_group', 'User');
     const sessionTtl = await this.getNumber('ciam_session_ttl_minutes', 480);
+    const idleTimeout = await this.getNumber('ciam_idle_timeout_minutes', 30);
+    const idleWarning = await this.getNumber('ciam_idle_warning_seconds', 60);
 
     const secretEntry = this.cache.get('ciam_client_secret');
     const updatedAt = secretEntry?.updatedAt || new Date();
@@ -155,6 +161,8 @@ export class SettingsService implements OnModuleInit {
       ciam_ad_gateway_url: adGateway,
       ciam_auto_provision_group: autoGroup,
       ciam_session_ttl_minutes: sessionTtl,
+      ciam_idle_timeout_minutes: idleTimeout,
+      ciam_idle_warning_seconds: idleWarning,
       updated_at: updatedAt,
     };
   }
@@ -238,6 +246,7 @@ export class SettingsService implements OnModuleInit {
         category: 'system_setting',
         action: 'update_smtp_settings',
         status: 'success',
+        ipAddress: ip,
         message: 'แก้ไขการตั้งค่าระบบส่งอีเมล SMTP Config',
         details: { changed_fields: changedFields, ip },
         triggeredBy: `user:${adminUsername}`,
@@ -274,6 +283,20 @@ export class SettingsService implements OnModuleInit {
       ciam_ad_gateway_url: { val: dto.ciam_ad_gateway_url, dataType: 'string', desc: 'URL เซิร์ฟเวอร์ AD Gateway ภายในองค์กร' },
       ciam_auto_provision_group: { val: dto.ciam_auto_provision_group, dataType: 'string', desc: 'ชื่อกลุ่มสิทธิ์เริ่มต้น' },
       ciam_session_ttl_minutes: { val: dto.ciam_session_ttl_minutes !== undefined ? String(dto.ciam_session_ttl_minutes) : undefined, dataType: 'integer', desc: 'อายุ Access Token ของระบบลูก' },
+      ciam_idle_timeout_minutes: {
+        val: dto.ciam_idle_timeout_minutes !== undefined
+          ? String(Math.min(1440, Math.max(1, Math.round(Number(dto.ciam_idle_timeout_minutes) || 30))))
+          : undefined,
+        dataType: 'integer',
+        desc: 'ระยะเวลาที่อนุญาตให้ผู้ใช้ไม่มีการใช้งาน (Idle Timeout หน่วย: นาที)',
+      },
+      ciam_idle_warning_seconds: {
+        val: dto.ciam_idle_warning_seconds !== undefined
+          ? String(Math.min(300, Math.max(10, Math.round(Number(dto.ciam_idle_warning_seconds) || 60))))
+          : undefined,
+        dataType: 'integer',
+        desc: 'ระยะเวลานับถอยหลังแจ้งเตือนก่อนตัดเซสชันอัตโนมัติ (หน่วย: วินาที)',
+      },
     };
 
 
@@ -330,6 +353,7 @@ export class SettingsService implements OnModuleInit {
       category: 'system_setting',
       action: 'update_ciam_settings',
       status: 'success',
+      ipAddress: ip,
       message: 'แก้ไขการตั้งค่าระบบ Central IAM SSO',
       details: { changed_fields: changedFields, ip },
       triggeredBy: `user:${adminUsername}`,

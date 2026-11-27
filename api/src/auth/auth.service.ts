@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 import { SettingsService } from '../settings/settings.service';
 import { TransactionLogsService } from '../transaction-logs/transaction-logs.service';
+import { SessionActivityService } from './session-activity.service';
 import { validatePasswordComplexity, checkPasswordExpiry } from './password-policy';
 
 @Injectable()
@@ -20,6 +21,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly settingsService: SettingsService,
     private readonly transactionLogsService: TransactionLogsService,
+    private readonly sessionActivityService: SessionActivityService,
   ) {}
 
   // ─── AES-256-GCM Encryption (Deprecating but keeping if needed elsewhere) ─
@@ -262,11 +264,17 @@ export class AuthService {
   async login(user: any) {
     // Update last access
     await this.usersService.updateLastAccess(user.id);
-    const payload = { email: user.email, sub: user.id, role: user.role };
+    const rawTtl = await this.settingsService.getNumber('ciam_session_ttl_minutes', 480);
+    const sessionTtlMinutes = Math.min(1440, Math.max(15, Math.round(rawTtl || 480)));
+    const sid = crypto.randomUUID();
+    const payload = { email: user.email, sub: user.id, role: user.role, sid };
+
+    this.sessionActivityService.startSession(sid, user.id, user.username);
+
     return {
-      access_token: this.jwtService.sign(payload),
+      access_token: this.jwtService.sign(payload, { expiresIn: `${sessionTtlMinutes}m` }),
       refresh_token: this.jwtService.sign(payload, { expiresIn: '7d' }),
-      expires: 3600 * 1000, // 1 hour in ms
+      expires: sessionTtlMinutes * 60 * 1000,
       user: {
         id: user.id,
         username: user.username,
@@ -303,6 +311,7 @@ export class AuthService {
         category: 'security_password',
         action: 'change_password_failed',
         status: 'failed',
+        ipAddress,
         message: `เปลี่ยนรหัสผ่านไม่สำเร็จ: รหัสผ่านเดิมไม่ถูกต้องสำหรับ '${user.username}'`,
         details: { username: user.username, ip: ipAddress, reason: 'InvalidOldPassword' },
         triggeredBy: `user:${user.username}`,
@@ -317,6 +326,7 @@ export class AuthService {
         category: 'security_password',
         action: 'change_password_failed',
         status: 'failed',
+        ipAddress,
         message: `เปลี่ยนรหัสผ่านไม่สำเร็จ: รหัสผ่านใหม่ไม่ผ่านเกณฑ์ความซับซ้อน (${complexity.error})`,
         details: { username: user.username, ip: ipAddress, error: complexity.error },
         triggeredBy: `user:${user.username}`,
@@ -341,6 +351,7 @@ export class AuthService {
       category: 'security_password',
       action: 'change_local_password',
       status: 'success',
+      ipAddress,
       message: `เปลี่ยนรหัสผ่านบัญชีท้องถิ่นสำเร็จสำหรับ '${user.username}' (มีอายุ 90 วัน)`,
       details: {
         username: user.username,
@@ -442,6 +453,7 @@ export class AuthService {
           category: 'security_break_glass',
           action: 'fallback_ad_login',
           status: 'success',
+          ipAddress,
           message: `เข้าสู่ระบบผ่าน AD Gateway สำรองในช่วง Break-Glass: '${username}'`,
           details: { username, gateway: gatewayUrl, ip: ipAddress },
           triggeredBy: `user:${username}`,

@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { AiService } from './ai.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { extractClientIp } from '../common/ip.util';
 import * as express from 'express';
 import { Role } from '@prisma/client';
 
@@ -27,8 +28,20 @@ export class AiController {
   }
 
   private getClientIp(req: express.Request): string {
-    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || 'unknown';
-    return typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : 'unknown';
+    return extractClientIp(req);
+  }
+
+  // ─── Authenticated Status Check (All Users) ──────────────────────────────
+  @UseGuards(JwtAuthGuard)
+  @Get(['ai/status', 'api/ai/status'])
+  async getAiStatus() {
+    const cfg = await this.aiService.getAiConfig();
+    return {
+      enabled: cfg.enabled,
+      provider: cfg.provider,
+      model: cfg.model,
+      has_api_key: cfg.has_api_key,
+    };
   }
 
   // ─── Admin Settings Channel ─────────────────────────────────────────────

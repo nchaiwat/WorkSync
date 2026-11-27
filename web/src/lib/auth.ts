@@ -1,6 +1,6 @@
 const getApiBase = () => {
   if (typeof window === 'undefined') {
-    return process.env.NEXT_PUBLIC_API_URL || 'http://api:4000';
+    return process.env.NEXT_PUBLIC_API_URL || 'http://worksync-api:4000';
   }
   return '';
 };
@@ -150,8 +150,13 @@ export async function getMe(token: string) {
   if (res.status === 401 && typeof window !== 'undefined') {
     const isLoginPage = window.location.pathname === '/login';
     const isAuthCallback = window.location.pathname === '/auth/callback';
-    if (!isLoginPage && !isAuthCallback) {
-      logout();
+    const isAuthStart = window.location.pathname === '/auth/start';
+    if (!isLoginPage && !isAuthCallback && !isAuthStart) {
+      if (res.headers.get('x-session-expired') === 'idle_timeout') {
+        logoutIdleTimeout(window.location.pathname);
+      } else {
+        logout();
+      }
     }
   }
 
@@ -160,20 +165,66 @@ export async function getMe(token: string) {
   return data.data;
 }
 
+export async function pingSession(token: string) {
+  const res = await fetch(`${API_BASE}/auth/session/ping`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) {
+    throw new Error('Session ping failed');
+  }
+  return await res.json();
+}
+
+function clearAuthClientStorage() {
+  document.cookie = 'directus_token=; path=/; max-age=0';
+  document.cookie = 'directus_refresh=; path=/; max-age=0';
+  document.cookie = 'directus_username=; path=/; max-age=0';
+  document.cookie = 'directus_first_name=; path=/; max-age=0';
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('app_auth_provider');
+    localStorage.removeItem('worksync_last_activity_ts');
+  }
+}
+
+export function notifyLogout(reason: 'manual' | 'idle_timeout' = 'manual', username?: string) {
+  if (typeof window === 'undefined') return;
+  const token = getAuthToken();
+  const resolvedUser = username || getAuthUsername() || undefined;
+  try {
+    fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      keepalive: true,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ reason, username: resolvedUser }),
+    }).catch(() => {});
+  } catch {
+    /* ignore */
+  }
+}
+
+export function logoutIdleTimeout(redirectPath?: string) {
+  if (typeof window === 'undefined') return;
+  notifyLogout('idle_timeout');
+  clearAuthClientStorage();
+  const target = redirectPath || window.location.pathname || '/';
+  window.location.href = `/login?reason=idle_timeout&redirect_uri=${encodeURIComponent(target)}`;
+}
+
 export function logout() {
   const authProvider = typeof window !== 'undefined' ? localStorage.getItem('app_auth_provider') : null;
   const ciamPortalUrl =
     (typeof window !== 'undefined' && localStorage.getItem('app_ciam_portal_url')) ||
     'https://ciam.windowasia.com/portal';
 
-  document.cookie = 'directus_token=; path=/; max-age=0';
-  document.cookie = 'directus_refresh=; path=/; max-age=0';
-  document.cookie = 'directus_username=; path=/; max-age=0';
-  document.cookie = 'directus_first_name=; path=/; max-age=0';
-
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('app_auth_provider');
-  }
+  notifyLogout('manual');
+  clearAuthClientStorage();
 
   if (authProvider === 'local') {
     window.location.href = '/login';
@@ -460,11 +511,16 @@ export async function getSsoAuthorizeUrl(redirectUri: string) {
   return await res.json();
 }
 
-export async function ssoCallback(code: string, codeVerifier: string, redirectUri: string) {
+export async function ssoCallback(code: string, codeVerifier: string, redirectUri: string, state?: string) {
   const res = await fetch(`${API_BASE}/auth/sso/callback`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, code_verifier: codeVerifier, redirect_uri: redirectUri }),
+    body: JSON.stringify({
+      code,
+      code_verifier: codeVerifier,
+      redirect_uri: redirectUri,
+      ...(state ? { state } : {}),
+    }),
   });
   if (!res.ok) {
     let errorMsg = 'การยืนยันตัวตน SSO ล้มเหลว';

@@ -15,6 +15,11 @@ import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { BotDefenseService } from './bot-defense.service';
+import { SessionActivityService } from './session-activity.service';
+import { SettingsService } from '../settings/settings.service';
+import { TransactionLogsService } from '../transaction-logs/transaction-logs.service';
+import { JwtService } from '@nestjs/jwt';
+import { extractClientIp } from '../common/ip.util';
 import * as express from 'express';
 
 @Controller()
@@ -23,6 +28,10 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly usersService: UsersService,
     private readonly botDefenseService: BotDefenseService,
+    private readonly sessionActivityService: SessionActivityService,
+    private readonly settingsService: SettingsService,
+    private readonly transactionLogsService: TransactionLogsService,
+    private readonly jwtService: JwtService,
   ) {}
 
   @Post(['auth/login', 'api/auth/login'])
@@ -31,8 +40,7 @@ export class AuthController {
     @Req() req: express.Request,
     @Res({ passthrough: true }) res: express.Response,
   ) {
-    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || 'unknown';
-    const ip = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : 'unknown';
+    const ip = extractClientIp(req);
 
     // ─── หมวด F: Enterprise In-App Bot Defense 3 ชั้น (v2.10.0) ───────────
     const botCheck = await this.botDefenseService.checkBotDefense(ip, {
@@ -83,8 +91,7 @@ export class AuthController {
       throw new BadRequestException('กรุณาระบุรหัสผ่านเดิมและรหัสผ่านใหม่');
     }
 
-    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || 'unknown';
-    const ip = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : 'unknown';
+    const ip = extractClientIp(req);
 
     return await this.authService.changeLocalPassword(
       user.id,
@@ -92,6 +99,82 @@ export class AuthController {
       body.new_password,
       ip,
     );
+  }
+
+  // ─── หมวด H: Session Ping / Keep-Alive & Logout (v2.14.0 / v2.15.0) ────
+  @UseGuards(JwtAuthGuard)
+  @Post(['auth/session/ping', 'api/auth/session/ping'])
+  async pingSession(@Req() req: express.Request) {
+    const user = req.user as any;
+    const sessionKey = user?.sid || user?.id;
+    if (sessionKey && user?.id) {
+      this.sessionActivityService.touchSession(sessionKey, user.id, user.username);
+    }
+    const [idleTimeoutMinutes, idleWarningSeconds, sessionTtlMinutes] = await Promise.all([
+      this.settingsService.getNumber('ciam_idle_timeout_minutes', 30),
+      this.settingsService.getNumber('ciam_idle_warning_seconds', 60),
+      this.settingsService.getNumber('ciam_session_ttl_minutes', 480),
+    ]);
+
+    return {
+      status: 'ok',
+      idle_timeout_minutes: idleTimeoutMinutes,
+      idle_warning_seconds: idleWarningSeconds,
+      session_ttl_minutes: sessionTtlMinutes,
+      server_time: new Date().toISOString(),
+    };
+  }
+
+  @Post(['auth/logout', 'api/auth/logout', 'auth/sso/logout', 'api/auth/sso/logout'])
+  async logoutSession(@Body() body: any, @Req() req: express.Request) {
+    const ip = extractClientIp(req);
+    let token = '';
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.slice(7).trim();
+    } else if (req.headers.cookie) {
+      const cookies = req.headers.cookie.split(';').reduce((acc: Record<string, string>, c: string) => {
+        const [k, v] = c.trim().split('=');
+        if (k && v) acc[k] = v;
+        return acc;
+      }, {});
+      token = cookies['worksync_token'] || cookies['directus_token'] || '';
+    }
+
+    let decoded: any = null;
+    if (token) {
+      try {
+        decoded = this.jwtService.decode(token);
+      } catch {}
+    }
+
+    const reason = body?.reason === 'idle_timeout' ? 'idle_timeout' : 'logout';
+    const sessionKey = decoded?.sid || decoded?.sub;
+    if (sessionKey) {
+      this.sessionActivityService.revokeSession(sessionKey, reason);
+    }
+
+    if (reason === 'idle_timeout') {
+      let username = body?.username || '';
+      if (!username && decoded?.sub) {
+        const user = await this.usersService.findOneById(decoded.sub).catch(() => null);
+        username = user?.username || decoded?.email || decoded?.sub;
+      }
+      if (username && this.sessionActivityService.shouldRecordIdleLog(username)) {
+        const idleTimeoutMinutes = await this.settingsService.getNumber('ciam_idle_timeout_minutes', 30);
+        await this.transactionLogsService.recordLog({
+          category: 'ciam_sso',
+          action: 'session_idle_timeout',
+          status: 'info',
+          ipAddress: ip,
+          message: `ระบบตัดเซสชันและออกจากระบบอัตโนมัติเนื่องจากไม่มีการใช้งานเกิน ${idleTimeoutMinutes} นาที (Idle Timeout)`,
+          details: { idle_minutes: idleTimeoutMinutes, user: username, ip },
+          triggeredBy: 'system:idle_timeout',
+        });
+      }
+    }
+
+    return { status: 'success', reason };
   }
 
   @Post('auth/login-pin')

@@ -15,6 +15,8 @@ interface CiamSettings {
   ciam_ad_gateway_url: string;
   ciam_auto_provision_group: string;
   ciam_session_ttl_minutes: number;
+  ciam_idle_timeout_minutes: number;
+  ciam_idle_warning_seconds: number;
   updated_at?: string;
 }
 
@@ -33,12 +35,16 @@ interface TransactionLog {
   category: string;
   action: string;
   status: string;
+  ipAddress?: string;
+  ip_address?: string;
   message: string;
   details?: string;
   records_count?: number;
   duration_ms?: number;
-  triggered_by: string;
-  created_at: string;
+  triggeredBy?: string;
+  triggered_by?: string;
+  createdAt?: string;
+  created_at?: string;
 }
 
 export default function AdminSettingsPage() {
@@ -58,6 +64,8 @@ export default function AdminSettingsPage() {
     ciam_ad_gateway_url: 'http://192.168.12.11:3100',
     ciam_auto_provision_group: 'User',
     ciam_session_ttl_minutes: 480,
+    ciam_idle_timeout_minutes: 30,
+    ciam_idle_warning_seconds: 60,
   });
 
   const [newSecret, setNewSecret] = useState('');
@@ -147,6 +155,8 @@ export default function AdminSettingsPage() {
           ...res.settings,
           ciam_sso_enabled: res.settings.ciam_sso_enabled === true || res.settings.ciam_sso_enabled === 'true',
           ciam_break_glass_active: res.settings.ciam_break_glass_active === true || res.settings.ciam_break_glass_active === 'true',
+          ciam_idle_timeout_minutes: Number(res.settings.ciam_idle_timeout_minutes) || 30,
+          ciam_idle_warning_seconds: Number(res.settings.ciam_idle_warning_seconds) || 60,
         });
       }
       const logsRes = await admin.getCiamLogs(token, logCategory, 30);
@@ -384,6 +394,8 @@ export default function AdminSettingsPage() {
         ciam_ad_gateway_url: settings.ciam_ad_gateway_url,
         ciam_auto_provision_group: settings.ciam_auto_provision_group,
         ciam_session_ttl_minutes: Number(settings.ciam_session_ttl_minutes),
+        ciam_idle_timeout_minutes: Number(settings.ciam_idle_timeout_minutes),
+        ciam_idle_warning_seconds: Number(settings.ciam_idle_warning_seconds),
       };
 
       if (newSecret.trim()) {
@@ -896,6 +908,42 @@ export default function AdminSettingsPage() {
               </span>
             </div>
 
+            {/* Base URL & MCP Tools */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  AI Base URL (Optional — สำหรับ Ollama / Private Proxy)
+                </label>
+                <input
+                  type="text"
+                  value={aiSettings.base_url}
+                  onChange={(e) => setAiSettings({ ...aiSettings, base_url: e.target.value })}
+                  placeholder="เช่น http://localhost:11434 หรือ https://api.openai.com/v1"
+                  className="w-full px-3.5 py-2 text-sm border border-gray-200 dark:border-slate-600 rounded-xl bg-gray-50/50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700">
+                <div>
+                  <label className="text-xs font-bold text-gray-900 dark:text-white block">
+                    อนุญาตใช้งาน MCP Tools (Read-Only)
+                  </label>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                    อนุญาตให้ AI Copilot ดึงข้อมูลวิเคราะห์ตามสิทธิ์ RBAC
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={aiSettings.allow_mcp_tools}
+                    onChange={(e) => setAiSettings({ ...aiSettings, allow_mcp_tools: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+            </div>
+
             {/* System Prompt */}
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
@@ -1086,7 +1134,37 @@ export default function AdminSettingsPage() {
                   onChange={(e) => setSettings({ ...settings, ciam_session_ttl_minutes: parseInt(e.target.value, 10) || 480 })}
                   className="w-full px-3.5 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
-                <span className="text-[11px] text-gray-400 mt-1 block">ค่ามาตรฐานแนะนำ: 480 นาที (8 ชั่วโมง)</span>
+                <span className="text-[11px] text-gray-400 mt-1 block">ค่ามาตรฐานแนะนำ: 480 นาที (8 ชั่วโมง Hard Limit)</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  ระยะเวลาตัดเซสชันเมื่อไม่มีการใช้งาน (Idle Timeout — นาที)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="1440"
+                  value={settings.ciam_idle_timeout_minutes}
+                  onChange={(e) => setSettings({ ...settings, ciam_idle_timeout_minutes: parseInt(e.target.value, 10) || 30 })}
+                  className="w-full px-3.5 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+                <span className="text-[11px] text-gray-400 mt-1 block">มาตรฐาน ISO 27001 / NIST SP 800-63B: 30 นาที (ปรับได้ 1–1440 นาที)</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  เวลาแจ้งเตือนนับถอยหลังก่อนตัดเซสชัน (วินาที)
+                </label>
+                <input
+                  type="number"
+                  min="10"
+                  max="300"
+                  value={settings.ciam_idle_warning_seconds}
+                  onChange={(e) => setSettings({ ...settings, ciam_idle_warning_seconds: parseInt(e.target.value, 10) || 60 })}
+                  className="w-full px-3.5 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+                <span className="text-[11px] text-gray-400 mt-1 block">ค่าแนะนำ: 60 วินาที (แสดง Modal เตือนล่วงหน้า 1 นาที)</span>
               </div>
             </div>
 
@@ -1155,6 +1233,8 @@ export default function AdminSettingsPage() {
                 <option value="">ทั้งหมด (All Categories)</option>
                 <option value="ciam_sso">ciam_sso (SSO Events)</option>
                 <option value="security_break_glass">security_break_glass (Break-Glass)</option>
+                <option value="security_bot">security_bot (Bot Defense)</option>
+                <option value="security_password">security_password (Password Policy)</option>
                 <option value="system_setting">system_setting (Config Changes)</option>
               </select>
             </div>
@@ -1168,6 +1248,7 @@ export default function AdminSettingsPage() {
                   <th className="py-2.5 px-3">หมวดหมู่ (Category)</th>
                   <th className="py-2.5 px-3">การกระทำ (Action)</th>
                   <th className="py-2.5 px-3">สถานะ</th>
+                  <th className="py-2.5 px-3">Client IP</th>
                   <th className="py-2.5 px-3">ข้อความ (Message)</th>
                   <th className="py-2.5 px-3">ดำเนินการโดย</th>
                 </tr>
@@ -1175,15 +1256,19 @@ export default function AdminSettingsPage() {
               <tbody className="divide-y divide-gray-100 dark:divide-slate-700/60">
                 {logs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-gray-400">
+                    <td colSpan={7} className="py-8 text-center text-gray-400">
                       ยังไม่มีบันทึก Transaction Logs ในระบบ
                     </td>
                   </tr>
                 ) : (
-                  logs.map((log) => (
+                  logs.map((log) => {
+                    const logTs = log.createdAt || log.created_at;
+                    const logIp = log.ipAddress || log.ip_address || '127.0.0.1 (SYSTEM)';
+                    const logActor = log.triggeredBy || log.triggered_by || '-';
+                    return (
                     <tr key={log.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-700/30">
                       <td className="py-2.5 px-3 text-gray-500 dark:text-gray-400 whitespace-nowrap font-mono text-[11px]">
-                        {new Date(log.created_at).toLocaleString('th-TH')}
+                        {logTs ? new Date(logTs).toLocaleString('th-TH') : '-'}
                       </td>
                       <td className="py-2.5 px-3">
                         <span className="px-2 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 font-mono text-[10px]">
@@ -1206,14 +1291,18 @@ export default function AdminSettingsPage() {
                           {log.status}
                         </span>
                       </td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        {logIp}
+                      </td>
                       <td className="py-2.5 px-3 text-gray-700 dark:text-gray-300 max-w-xs truncate" title={log.message}>
                         {log.message}
                       </td>
                       <td className="py-2.5 px-3 font-mono text-[11px] text-gray-500 dark:text-gray-400">
-                        {log.triggered_by}
+                        {logActor}
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

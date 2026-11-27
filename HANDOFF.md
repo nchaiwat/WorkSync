@@ -1,6 +1,6 @@
 # WorkSync — Handover & Continuation Guide (HANDOFF.md)
-**อัปเดตล่าสุด:** 12 พฤศจิกายน 2026 (11:25 น.)  
-**สถานะโปรเจกต์:** Production Ready / Central IAM Enterprise Integration Specification v2.12.0 Full Compliance  
+**อัปเดตล่าสุด:** 27 พฤศจิกายน 2026  
+**สถานะโปรเจกต์:** Production Ready / Central IAM Enterprise Integration Specification v2.15.0 Full Compliance  
 **Git Branch:** `main` (Synced with `origin/main`)
 
 ---
@@ -9,7 +9,7 @@
 
 **WorkSync** คือระบบบริหารจัดการภารกิจและติดตามงาน (Task Tracking & Enterprise Collaboration Platform) แบบ Real-time ที่พัฒนาขึ้นเพื่อตอบโจทย์การทำงานในองค์กร Window Asia รองรับการใช้งานเต็มรูปแบบทั้งบน **Desktop Web** และ **Mobile PWA (Progressive Web App)** 
 
-ระบบเชื่อมต่อกับระบบยืนยันตัวตนกลาง **Window Asia Central IAM** อย่างสมบูรณ์แบบตามข้อกำหนดมาตรฐานกลาง **v2.12.0** ผ่าน OAuth 2.0 (PKCE S256) และ RS256 JWKS มีระบบกู้คืนฉุกเฉิน (Break-Glass Mode), ระบบป้องกันบอท 3 ชั้น (3-Layer In-App Bot Defense), ระบบหมุนเวียนรหัสผ่านท้องถิ่น 90 วัน, ผู้ช่วยอัจฉริยะ **WorkSync Copilot (In-App AI)** และระบบสรุปงานประจำวันผ่านอีเมล (Daily Email Digest)
+ระบบเชื่อมต่อกับระบบยืนยันตัวตนกลาง **Window Asia Central IAM** อย่างสมบูรณ์แบบตามข้อกำหนดมาตรฐานกลาง **v2.15.0** ผ่าน OAuth 2.0 (PKCE S256) และ RS256 JWKS มีระบบกู้คืนฉุกเฉิน (Break-Glass Mode), ระบบป้องกันบอท 3 ชั้น (3-Layer In-App Bot Defense), ระบบหมุนเวียนรหัสผ่านท้องถิ่น 90 วัน, ระบบตัดเซสชันอัตโนมัติแบบกำหนดเวลาได้รายแอป (Configurable Idle Timeout + Dual-Timer), บังคับบันทึก Client IP ใน `transaction_logs`, ผู้ช่วยอัจฉริยะ **WorkSync Copilot (In-App AI)** และระบบสรุปงานประจำวันผ่านอีเมล (Daily Email Digest)
 
 ### 🛠️ เทคโนโลยีหลักในระบบ (Tech Stack)
 - **Backend API:** NestJS 10 (TypeScript), Prisma ORM v5.22.0
@@ -106,6 +106,12 @@
 ### 8. ✉️ SMTP Config & Daily Email Digest
 - ตั้งค่า SMTP แบบ Zero `.env` ใน `/admin/settings` (Host, Port, Sender, Password) พร้อมปุ่มทดสอบส่งอีเมลทันที
 - สมาชิกเลือกเปิด/ปิดรับ Daily Email Digest กำหนดเวลา (เช่น `08:30` น.) และเลือกประเภทงานได้ใน Modal โปรไฟล์
+
+### 9. ⏱️ Configurable Idle Session Timeout & Mandatory Audit IP Logging (v2.13.0 – v2.15.0)
+- **Dual-Timer Session Architecture:** Hard Limit ตาม `ciam_session_ttl_minutes` (480 นาที) ควบคู่ Sliding Idle Limit ตาม `ciam_idle_timeout_minutes` (ค่าเริ่มต้น 30 นาที) และ `ciam_idle_warning_seconds` (60 วินาที) ตั้งค่าได้ใน `/admin/settings`
+- **Full-Stack Idle Enforcement:** `SessionSecurityGuard` ฝั่ง Frontend (ซิงก์กิจกรรมข้ามแท็บ + Warning Countdown Modal + ปุ่มขยายเวลาใช้งาน) และ `SessionActivityService` + `JwtStrategy` ฝั่ง Backend (Header `X-Session-Expired: idle_timeout` + Event `TO-01`)
+- **Mandatory Audit IP (`transaction_logs.ip_address`):** บังคับบันทึก Client IP จริงทุกธุรกรรม (หรือ `'127.0.0.1 (SYSTEM)'` สำหรับงานระบบ) พร้อม Index `idx_trans_logs_ip`
+- **v2.13.0 Directory & SSO Hardening:** ส่ง `"framework_version": "2.15.0"`, รองรับ `password`/`must_change_password` เมื่อสร้าง Local Account จาก CIAM, Case-insensitive lookup, Least Privilege (`USER`), Protected Emergency Accounts, Replay Protection (`X-Request-Timestamp`), Strict `iss`/`aud` และ Break-Glass Guard ใน Callback
 
 ---
 

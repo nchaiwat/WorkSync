@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TransactionLogsService } from '../transaction-logs/transaction-logs.service';
+import { normalizeIp } from '../common/ip.util';
 
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 60 seconds
@@ -55,6 +56,7 @@ export class BotDefenseService {
           category: 'security_bot',
           action: 'ip_rate_limited',
           status: 'warning',
+          ipAddress: normalizeIp(cleanIp),
           message: `IP ${cleanIp} ถูกบล็อกเนื่องจากส่งคำขอล็อกอินเกินกำหนด (10 ครั้ง/นาที)`,
           details: { ip: cleanIp, retryAfter, attempts: timestamps.length },
           triggeredBy: `ip:${cleanIp}`,
@@ -78,6 +80,7 @@ export class BotDefenseService {
         category: 'security_bot',
         action: 'bot_honeypot_detected',
         status: 'warning',
+        ipAddress: normalizeIp(cleanIp),
         message: `ตรวจพบบอทกรอกฟิลด์ Decoy Honeypot จาก IP ${cleanIp}`,
         details: {
           ip: cleanIp,
@@ -106,6 +109,7 @@ export class BotDefenseService {
             category: 'security_bot',
             action: 'bot_timing_violation',
             status: 'warning',
+            ipAddress: normalizeIp(cleanIp),
             message: `ตรวจพบความเร็วการส่งข้อมูลผิดปกติของมนุษย์ (${deltaMs}ms) จาก IP ${cleanIp}`,
             details: { ip: cleanIp, deltaMs, renderTs, now },
             triggeredBy: `ip:${cleanIp}`,

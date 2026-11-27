@@ -14,6 +14,7 @@ import { TelegramModule } from '../telegram/telegram.module';
 import { CiamSsoService } from './ciam-sso.service';
 import { CiamSsoController } from './ciam-sso.controller';
 import { BotDefenseService } from './bot-defense.service';
+import { SessionActivityService } from './session-activity.service';
 
 @Module({
   imports: [
@@ -28,14 +29,14 @@ import { BotDefenseService } from './bot-defense.service';
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET') || 'worksync_super_secret_jwt_key_999888',
-        signOptions: { expiresIn: '1d' },
+        signOptions: { expiresIn: '8h' },
       }),
       inject: [ConfigService],
     }),
   ],
-  providers: [AuthService, JwtStrategy, CiamSsoService, BotDefenseService],
+  providers: [AuthService, JwtStrategy, CiamSsoService, BotDefenseService, SessionActivityService],
   controllers: [AuthController, CiamSsoController],
-  exports: [AuthService, CiamSsoService, BotDefenseService],
+  exports: [AuthService, CiamSsoService, BotDefenseService, SessionActivityService],
 })
 export class AuthModule {}
 

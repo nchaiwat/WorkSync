@@ -17,6 +17,7 @@ import { SettingsService, UpdateCiamDto, UpdateSmtpDto } from './settings.servic
 import { TransactionLogsService } from '../transaction-logs/transaction-logs.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { EmailService } from '../email/email.service';
+import { extractClientIp } from '../common/ip.util';
 import * as express from 'express';
 import { Role } from '@prisma/client';
 
@@ -39,8 +40,7 @@ export class SettingsController {
   }
 
   private getClientIp(req: express.Request): string {
-    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || 'unknown';
-    return typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : 'unknown';
+    return extractClientIp(req);
   }
 
   @UseGuards(JwtAuthGuard)

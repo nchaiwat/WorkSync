@@ -7,12 +7,14 @@ import {
   Logger,
 } from '@nestjs/common';
 import { SettingsService } from '../settings/settings.service';
+import { extractCiamOriginIp } from '../common/ip.util';
 import * as express from 'express';
 
 @Injectable()
 export class CiamM2mGuard implements CanActivate {
   private readonly logger = new Logger(CiamM2mGuard.name);
   private readonly ALLOWED_CIAM_IP = '157.173.219.153';
+  private readonly MAX_TIMESTAMP_DRIFT_SEC = 300; // 5 minutes replay protection
 
   constructor(private readonly settingsService: SettingsService) {}
 
@@ -31,12 +33,11 @@ export class CiamM2mGuard implements CanActivate {
       });
     }
 
-    // 2. IP Whitelist Check
-    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || '';
-    const clientIp = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : '';
+    // 2. IP Whitelist Check (x-ciam-origin-ip -> x-origin-ip -> x-forwarded-for -> socket)
+    const clientIp = extractCiamOriginIp(req);
 
     const isLocalOrPrivate =
-      !clientIp ||
+      clientIp === '127.0.0.1 (SYSTEM)' ||
       clientIp === '127.0.0.1' ||
       clientIp === '::1' ||
       clientIp === 'localhost' ||
@@ -52,6 +53,28 @@ export class CiamM2mGuard implements CanActivate {
       });
     }
 
+    // 3. Replay Attack Protection via X-Request-Timestamp (if header supplied)
+    const rawTs = req.headers['x-request-timestamp'] as string | undefined;
+    if (rawTs !== undefined && String(rawTs).trim() !== '') {
+      const parsedTs = Number(rawTs);
+      if (isNaN(parsedTs)) {
+        throw new UnauthorizedException({
+          status: 'FAILED',
+          message: 'Invalid X-Request-Timestamp header format.',
+        });
+      }
+      // Support both seconds and milliseconds
+      const tsSec = parsedTs > 1e12 ? Math.floor(parsedTs / 1000) : Math.floor(parsedTs);
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (Math.abs(nowSec - tsSec) > this.MAX_TIMESTAMP_DRIFT_SEC) {
+        throw new UnauthorizedException({
+          status: 'FAILED',
+          message: 'X-Request-Timestamp expired or outside allowed drift window.',
+        });
+      }
+    }
+
+    (req as any).ciamOriginIp = clientIp;
     return true;
   }
 }

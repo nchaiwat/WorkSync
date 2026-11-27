@@ -118,8 +118,27 @@ export default function Home() {
       };
       
       if (profileData.password) {
-        if (profileData.password.length < 6) {
-          throw new Error('รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร');
+        if (!currentUser.is_ad_auth) {
+          const pwd = profileData.password.trim();
+          const uname = (currentUser.username || '').trim().toLowerCase();
+          if (pwd.length < 8 || pwd.length > 16) {
+            throw new Error('รหัสผ่านใหม่ต้องมีความยาวระหว่าง 8 ถึง 16 ตัวอักษร');
+          }
+          if (!/[A-Z]/.test(pwd)) {
+            throw new Error('รหัสผ่านต้องมีตัวอักษรพิมพ์ใหญ่ (A-Z) อย่างน้อย 1 ตัว');
+          }
+          if (!/[a-z]/.test(pwd)) {
+            throw new Error('รหัสผ่านต้องมีตัวอักษรพิมพ์เล็ก (a-z) อย่างน้อย 1 ตัว');
+          }
+          if (!/[0-9]/.test(pwd)) {
+            throw new Error('รหัสผ่านต้องมีตัวเลข (0-9) อย่างน้อย 1 ตัว');
+          }
+          if (!/[!@#$%^&*()_+\-=\[\]{}|;:,.<>?/~`]/.test(pwd)) {
+            throw new Error('รหัสผ่านต้องมีอักขระพิเศษ (!@#$%^&*...) อย่างน้อย 1 ตัว');
+          }
+          if (uname.length >= 3 && pwd.toLowerCase().includes(uname)) {
+            throw new Error('รหัสผ่านต้องไม่มีชื่อผู้ใช้ (Username) ปะปนอยู่');
+          }
         }
         updates.password = profileData.password;
       }
